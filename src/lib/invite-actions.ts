@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function removeMember(userId: string) {
   const supabase = await createClient();
@@ -28,6 +29,13 @@ export async function removeMember(userId: string) {
     .eq("user_id", userId);
 
   if (error) return { error: error.message };
+
+  try {
+    const admin = createAdminClient();
+    await admin.auth.admin.deleteUser(userId);
+  } catch {
+    // user_roles already deleted — ignore auth delete errors
+  }
 
   revalidatePath("/team");
   return { success: true };

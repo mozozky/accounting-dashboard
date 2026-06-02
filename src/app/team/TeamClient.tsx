@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { removeMember } from "@/lib/invite-actions";
 
 interface Member {
@@ -23,38 +24,23 @@ export default function TeamClient({
   currentRole,
 }: Props) {
   const [removing, setRemoving] = useState<string | null>(null);
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
 
   const isLeader = currentRole === "leader";
 
   const handleRemove = async (userId: string) => {
-    if (!confirm("Remove this member? Their role will be deleted.")) return;
+    if (!confirm("Remove this member? Their account will be deleted.")) return;
     setRemoving(userId);
-    setMessage(null);
     const result = await removeMember(userId);
     setRemoving(null);
     if (result.error) {
-      setMessage({ type: "error", text: result.error });
+      toast.error(result.error);
+    } else {
+      toast.success("Member removed");
     }
   };
 
   return (
     <div>
-      {message && (
-        <div
-          className={`mb-4 rounded-md border px-4 py-2 text-sm ${
-            message.type === "success"
-              ? "border-emerald-800 bg-emerald-950/30 text-emerald-400"
-              : "border-red-800 bg-red-950/30 text-red-400"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
-
       <div className="mb-6 rounded-md border border-zinc-700 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-400">
         <p>
           New team members? Share the signup link:{" "}

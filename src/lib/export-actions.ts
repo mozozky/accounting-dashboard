@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 const CSV_HEADERS = [
   "Client",
   "Task Type",
+  "Stage",
+  "Status",
   "PIC",
   "Progress",
-  "Hard Deadline",
-  "Status",
+  "Deadline",
 ];
 
 export async function exportDashboardCSV(month: number, year: number) {
@@ -19,6 +20,10 @@ export async function exportDashboardCSV(month: number, year: number) {
     .select("id, name, pic_user_id")
     .eq("is_active", true)
     .order("name");
+
+  if (!clients || clients.length === 0) {
+    return { csv: "", message: "No active clients found" };
+  }
 
   const clientMap = new Map((clients ?? []).map((c) => [c.id, c]));
 
@@ -43,9 +48,13 @@ export async function exportDashboardCSV(month: number, year: number) {
     .eq("is_active", true)
     .not("client_id", "is", null);
 
+  if (!templateRows || templateRows.length === 0) {
+    return { csv: "", message: "No assigned task types found" };
+  }
+
   const seen = new Set<string>();
   const pairs: { clientId: string; taskTypeId: string }[] = [];
-  for (const row of templateRows ?? []) {
+  for (const row of templateRows) {
     const key = `${row.client_id}-${row.task_type_id}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -64,28 +73,62 @@ export async function exportDashboardCSV(month: number, year: number) {
 
   const { data: periods } = await supabase
     .from("client_periods")
-    .select("client_id, task_type_id, hard_deadline, period_stages(status)")
+    .select(
+      "client_id, task_type_id, hard_deadline, period_stages(status, stage_name, order_index)"
+    )
     .eq("period_month", month)
     .eq("period_year", year);
 
-  const periodByClientTask = new Map<string, {
-    hard_deadline: string | null;
-    done: number;
-    total: number;
-    status: string;
-  }>();
+  const periodByClientTask = new Map<
+    string,
+    {
+      hard_deadline: string | null;
+      done: number;
+      total: number;
+      status: string;
+      stage: string;
+    }
+  >();
 
   for (const p of periods ?? []) {
-    const stages = p.period_stages ?? [];
-    const done = stages.filter((s: { status: string }) => s.status === "done").length;
+    const stages = (p.period_stages ?? []).sort(
+      (a: { order_index: number }, b: { order_index: number }) =>
+        a.order_index - b.order_index
+    );
+    const done = stages.filter(
+      (s: { status: string }) => s.status === "done"
+    ).length;
 
     let status = "No Period";
+    let stage = "-";
     if (stages.length > 0) {
-      const hasBlocked = stages.some((s: { status: string }) => s.status === "blocked");
+      const active =
+        stages.find(
+          (s: { status: string }) => s.status === "in_progress"
+        ) ||
+        stages.find(
+          (s: { status: string }) => s.status === "blocked"
+        ) ||
+        stages.find(
+          (s: { status: string }) => s.status === "not_started"
+        );
+
+      stage = active?.stage_name ?? stages[stages.length - 1].stage_name;
+
+      const hasBlocked = stages.some(
+        (s: { status: string }) => s.status === "blocked"
+      );
       if (hasBlocked) status = "Blocked";
-      else if (stages.every((s: { status: string }) => s.status === "done")) status = "Done";
-      else if (stages.some((s: { status: string }) => s.status === "in_progress")) status = "In Progress";
-      else if (stages.every((s: { status: string }) => s.status === "not_started")) status = "Not Started";
+      else if (stages.every((s: { status: string }) => s.status === "done"))
+        status = "Done";
+      else if (
+        stages.some((s: { status: string }) => s.status === "in_progress")
+      )
+        status = "In Progress";
+      else if (
+        stages.every((s: { status: string }) => s.status === "not_started")
+      )
+        status = "Not Started";
       else if (p.hard_deadline) {
         const deadline = new Date(p.hard_deadline);
         const today = new Date();
@@ -100,6 +143,7 @@ export async function exportDashboardCSV(month: number, year: number) {
       done,
       total: stages.length,
       status,
+      stage,
     });
   }
 
@@ -112,6 +156,7 @@ export async function exportDashboardCSV(month: number, year: number) {
     const period = periodByClientTask.get(`${clientId}-${taskTypeId}`);
     const progress = period ? `${period.done}/${period.total}` : "-";
     const status = period?.status ?? "No Period";
+    const stage = period?.stage ?? "-";
     const deadline = period?.hard_deadline ?? "-";
     const picName = profileMap.get(client.pic_user_id ?? "") ?? "-";
     const taskTypeName = taskTypeMap.get(taskTypeId) ?? "";
@@ -119,11 +164,16 @@ export async function exportDashboardCSV(month: number, year: number) {
     rows.push([
       client.name,
       taskTypeName,
+      stage,
+      status,
       picName,
       progress,
       deadline,
-      status,
     ]);
+  }
+
+  if (rows.length === 0) {
+    return { csv: "", message: "No data to export for this month" };
   }
 
   rows.sort((a, b) => {
@@ -131,6 +181,7 @@ export async function exportDashboardCSV(month: number, year: number) {
     return a[1].localeCompare(b[1]);
   });
 
+  // escape CSV value
   const escapeCSV = (val: string) => {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
       return `"${val.replace(/"/g, '""')}"`;

@@ -7,6 +7,7 @@ export interface Profile {
   full_name: string | null;
   email: string | null;
   created_at: string;
+  password_set: boolean;
 }
 
 export interface UserRoleRow {

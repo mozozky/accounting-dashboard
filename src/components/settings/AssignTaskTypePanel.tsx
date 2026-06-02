@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { assignTaskTypeToClientAction } from "@/lib/actions";
 import { createCustomTaskType } from "@/lib/settings-actions";
 
@@ -28,7 +29,6 @@ export default function AssignTaskTypePanel({
   const [customName, setCustomName] = useState("");
   const [creating, setCreating] = useState(false);
   const [needsRefresh, setNeedsRefresh] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalAssigned(propsAssigned);
@@ -43,7 +43,6 @@ export default function AssignTaskTypePanel({
     if (!item) return;
 
     setLoading(taskTypeId);
-
     setLocalAssigned((prev) => [...prev, item]);
     setLocalAvailable((prev) => prev.filter((t) => t.id !== taskTypeId));
 
@@ -53,8 +52,7 @@ export default function AssignTaskTypePanel({
     if (result.error) {
       setLocalAssigned((prev) => prev.filter((t) => t.id !== taskTypeId));
       setLocalAvailable((prev) => [...prev, item]);
-      setErrorMsg(result.error);
-      setTimeout(() => setErrorMsg(null), 5000);
+      toast.error(result.error);
     } else {
       setNeedsRefresh(true);
     }
@@ -75,7 +73,8 @@ export default function AssignTaskTypePanel({
         { id: result.taskType!.id, name: result.taskType!.name },
       ]);
       setNeedsRefresh(true);
-    } else {
+    } else if (result.error) {
+      toast.error(result.error);
       setCustomName(name);
     }
   };
@@ -85,12 +84,6 @@ export default function AssignTaskTypePanel({
       <h3 className="mb-3 text-sm font-medium text-zinc-300">
         Task Types Assigned
       </h3>
-
-      {errorMsg && (
-        <div className="mb-3 rounded border border-red-800 bg-red-950/30 px-3 py-2 text-xs text-red-400">
-          {errorMsg}
-        </div>
-      )}
 
       <div className="mb-4 space-y-1">
         {localAssigned.map((tt) => (

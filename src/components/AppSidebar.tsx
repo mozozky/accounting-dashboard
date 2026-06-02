@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/lib/auth-actions";
-
-const NAV_ITEMS = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Clients", href: "/clients" },
-  { label: "Team", href: "/team" },
-  { label: "Settings", href: "/settings" },
-];
+import SidebarNav from "./SidebarNav";
 
 export default async function AppSidebar() {
   const supabase = await createClient();
@@ -37,17 +31,7 @@ export default async function AppSidebar() {
         Accounting
       </Link>
 
-      <nav className="flex flex-1 flex-col gap-1">
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-white"
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <SidebarNav />
 
       <div className="border-t border-zinc-800 pt-3">
         <div className="mb-1 px-3">

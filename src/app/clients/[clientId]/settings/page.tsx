@@ -6,8 +6,10 @@ import { SettingsForm } from "./SettingsForm";
 
 export default async function ClientSettingsPage({
   params,
+  searchParams,
 }: {
   params: { clientId: string };
+  searchParams: { new?: string };
 }) {
   const supabase = await createClient();
 
@@ -121,6 +123,13 @@ export default async function ClientSettingsPage({
       <h1 className="mb-8 text-lg font-semibold text-white">
         Settings — {client.name}
       </h1>
+
+      {searchParams.new === "1" && (
+        <div className="mb-6 rounded-md border border-amber-800 bg-amber-950/30 px-4 py-3 text-sm text-amber-400">
+          Klien berhasil dibuat. Assign task type di bawah untuk mulai
+          tracking pekerjaan.
+        </div>
+      )}
 
       <div className="mb-8">
         <h2 className="mb-4 text-sm font-medium text-zinc-300">

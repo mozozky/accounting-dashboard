@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 import StatusBadge from "./StatusBadge";
 import StageTimeline from "./StageTimeline";
 import StageProgressPopup, {
@@ -51,7 +53,6 @@ export default function ClientsTable({
   const [taskTypeFilter, setTaskTypeFilter] = useState<string>("all");
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [generatingAll, setGeneratingAll] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [popupRow, setPopupRow] = useState<ClientRow | null>(null);
 
   const filtered = useMemo(() => {
@@ -75,7 +76,6 @@ export default function ClientsTable({
   const handleGeneratePeriod = async (clientId: string, taskTypeId: string) => {
     const key = `${clientId}-${taskTypeId}`;
     setGenerating((prev) => ({ ...prev, [key]: true }));
-    setError(null);
     const result = await generatePeriodForClientAction(
       clientId,
       taskTypeId,
@@ -83,25 +83,18 @@ export default function ClientsTable({
       currentYear
     );
     setGenerating((prev) => ({ ...prev, [key]: false }));
-    if (result.error) setError(result.error);
+    if (result.error) toast.error(result.error);
   };
 
   const handleGenerateAll = async () => {
     setGeneratingAll(true);
-    setError(null);
     const result = await generateNextMonthAction();
     setGeneratingAll(false);
-    if (result.error && "error" in result) setError(result.error as string);
+    if (result.error && "error" in result) toast.error(result.error as string);
   };
 
   return (
     <div>
-      {error && (
-        <div className="mb-4 rounded-md border border-red-800 bg-red-950/50 px-4 py-2 text-sm text-red-400">
-          {error}
-        </div>
-      )}
-
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <input
           type="text"
@@ -176,9 +169,12 @@ export default function ClientsTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((client) => (
-              <tr
+            {filtered.map((client, i) => (
+              <motion.tr
                 key={`${client.clientId}-${client.taskTypeId}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: i * 0.03 }}
                 className="border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50"
               >
                 <td className="px-4 py-3 font-medium">
@@ -238,7 +234,7 @@ export default function ClientsTable({
                     </button>
                   )}
                 </td>
-              </tr>
+              </motion.tr>
             ))}
             {filtered.length === 0 && (
               <tr>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { exportDashboardCSV } from "@/lib/export-actions";
 
 interface Props {
@@ -13,10 +14,16 @@ export default function ExportButton({ month, year }: Props) {
 
   const handleExport = async () => {
     setLoading(true);
-    const result = await exportDashboardCSV(month, year);
-    setLoading(false);
 
-    if (result.csv) {
+    try {
+      const result = await exportDashboardCSV(month, year);
+
+      if (!result.csv) {
+        toast.error(result.message ?? "No data to export");
+        setLoading(false);
+        return;
+      }
+
       const blob = new Blob([result.csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -24,7 +31,11 @@ export default function ExportButton({ month, year }: Props) {
       a.download = `dashboard-${year}-${String(month).padStart(2, "0")}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export failed. Please try again.");
     }
+
+    setLoading(false);
   };
 
   return (

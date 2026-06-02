@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { updateProfile, changePassword } from "./actions";
 
 interface Props {
@@ -10,68 +11,50 @@ interface Props {
 
 export default function SettingsClient({ email, fullName }: Props) {
   const [name, setName] = useState(fullName);
-  const [profileMsg, setProfileMsg] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
-  const [pwMsg, setPwMsg] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-  const [saving, setSaving] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
 
   const handleSaveProfile = async () => {
     setSaving(true);
-    setProfileMsg(null);
     const result = await updateProfile(name);
     setSaving(false);
     if (result.error) {
-      setProfileMsg({ type: "error", text: result.error });
+      toast.error(result.error);
     } else {
-      setProfileMsg({ type: "success", text: "Profile updated" });
-      setTimeout(() => setProfileMsg(null), 3000);
+      toast.success("Profile updated");
     }
   };
 
   const handleChangePassword = async () => {
     if (newPw !== confirmPw) {
-      setPwMsg({ type: "error", text: "Passwords do not match" });
+      toast.error("Passwords do not match");
       return;
     }
     if (newPw.length < 6) {
-      setPwMsg({
-        type: "error",
-        text: "Password must be at least 6 characters",
-      });
+      toast.error("Password must be at least 6 characters");
       return;
     }
     setPwSaving(true);
-    setPwMsg(null);
     const result = await changePassword(currentPw, newPw);
     setPwSaving(false);
     if (result.error) {
-      setPwMsg({ type: "error", text: result.error });
+      toast.error(result.error);
     } else {
-      setPwMsg({ type: "success", text: "Password changed" });
+      toast.success("Password changed");
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
-      setTimeout(() => setPwMsg(null), 3000);
     }
   };
 
   return (
     <div className="space-y-8">
-      {/* My Profile */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-        <h2 className="mb-4 text-sm font-medium text-zinc-300">
-          My Profile
-        </h2>
+        <h2 className="mb-4 text-sm font-medium text-zinc-300">My Profile</h2>
 
         <div className="mb-4">
           <label className="mb-1 block text-xs font-medium text-zinc-500">
@@ -97,29 +80,15 @@ export default function SettingsClient({ email, fullName }: Props) {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSaveProfile}
-            disabled={saving}
-            className="rounded bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-40"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-          {profileMsg && (
-            <span
-              className={`text-xs ${
-                profileMsg.type === "success"
-                  ? "text-emerald-400"
-                  : "text-red-400"
-              }`}
-            >
-              {profileMsg.text}
-            </span>
-          )}
-        </div>
+        <button
+          onClick={handleSaveProfile}
+          disabled={saving}
+          className="rounded bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-40"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
       </div>
 
-      {/* Change Password */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
         <h2 className="mb-4 text-sm font-medium text-zinc-300">
           Change Password
@@ -163,26 +132,13 @@ export default function SettingsClient({ email, fullName }: Props) {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleChangePassword}
-            disabled={pwSaving || !currentPw || !newPw || !confirmPw}
-            className="rounded bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-40"
-          >
-            {pwSaving ? "Saving..." : "Change Password"}
-          </button>
-          {pwMsg && (
-            <span
-              className={`text-xs ${
-                pwMsg.type === "success"
-                  ? "text-emerald-400"
-                  : "text-red-400"
-              }`}
-            >
-              {pwMsg.text}
-            </span>
-          )}
-        </div>
+        <button
+          onClick={handleChangePassword}
+          disabled={pwSaving || !currentPw || !newPw || !confirmPw}
+          className="rounded bg-white px-3 py-1.5 text-xs font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-40"
+        >
+          {pwSaving ? "Saving..." : "Change Password"}
+        </button>
       </div>
     </div>
   );

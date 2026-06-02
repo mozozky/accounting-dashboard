@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "framer-motion";
 import type { StageStatus } from "@/lib/types";
 
 const STATUS_STYLES: Record<StageStatus | "overdue" | "no_period", string> = {
@@ -24,10 +27,14 @@ interface Props {
 
 export default function StatusBadge({ status }: Props) {
   return (
-    <span
+    <motion.span
+      key={status}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.15 }}
       className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[status]}`}
     >
       {STATUS_LABELS[status]}
-    </span>
+    </motion.span>
   );
 }

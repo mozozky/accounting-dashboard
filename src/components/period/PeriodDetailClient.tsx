@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { motion } from "framer-motion";
 import StageCard from "./StageCard";
 import SavingIndicator from "./SavingIndicator";
 import {
@@ -132,17 +133,23 @@ export default function PeriodDetailClient({
       </div>
 
       <div className="space-y-3">
-        {stages.map((stage) => (
-          <StageCard
+        {stages.map((stage, i) => (
+          <motion.div
             key={stage.id}
-            stage={stage}
-            tasks={stageTasks[stage.id] ?? []}
-            teamMembers={teamMembers}
-            onChangeStatus={handleChangeStatus}
-            onChangeDeadline={handleChangeDeadline}
-            onChangeAssignee={handleChangeAssignee}
-            onChangeNotes={handleChangeNotes}
-          />
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: i * 0.05 }}
+          >
+            <StageCard
+              stage={stage}
+              tasks={stageTasks[stage.id] ?? []}
+              teamMembers={teamMembers}
+              onChangeStatus={handleChangeStatus}
+              onChangeDeadline={handleChangeDeadline}
+              onChangeAssignee={handleChangeAssignee}
+              onChangeNotes={handleChangeNotes}
+            />
+          </motion.div>
         ))}
       </div>
     </div>
