@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import ImportClientsButton from "@/components/clients/ImportClientsButton";
 
 export default async function ClientsPage() {
   const supabase = await createClient();
@@ -19,12 +20,15 @@ export default async function ClientsPage() {
             {clients?.length ?? 0} active clients
           </p>
         </div>
-        <Link
-          href="/clients/new"
-          className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
-        >
-          Add Client
-        </Link>
+        <div className="relative flex items-center gap-2">
+          <ImportClientsButton />
+          <Link
+            href="/clients/new"
+            className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
+          >
+            Add Client
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border border-zinc-800">
