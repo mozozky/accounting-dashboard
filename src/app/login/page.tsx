@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { login } from "./actions";
 
 export default function LoginPage({
@@ -69,6 +70,16 @@ export default function LoginPage({
             Sign in
           </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-zinc-500">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/signup"
+            className="text-white underline underline-offset-2 hover:text-zinc-300"
+          >
+            Sign up
+          </Link>
+        </p>
       </div>
     </div>
   );

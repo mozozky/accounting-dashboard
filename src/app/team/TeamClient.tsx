@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { inviteMember, removeMember } from "@/lib/invite-actions";
+import { removeMember } from "@/lib/invite-actions";
 
 interface Member {
   id: string;
@@ -22,8 +22,6 @@ export default function TeamClient({
   currentUserId,
   currentRole,
 }: Props) {
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -31,20 +29,6 @@ export default function TeamClient({
   } | null>(null);
 
   const isLeader = currentRole === "leader";
-
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    setInviting(true);
-    setMessage(null);
-    const result = await inviteMember(inviteEmail.trim());
-    setInviting(false);
-    if (result.error) {
-      setMessage({ type: "error", text: result.error });
-    } else {
-      setMessage({ type: "success", text: `Invitation sent to ${inviteEmail}` });
-      setInviteEmail("");
-    }
-  };
 
   const handleRemove = async (userId: string) => {
     if (!confirm("Remove this member? Their role will be deleted.")) return;
@@ -71,27 +55,14 @@ export default function TeamClient({
         </div>
       )}
 
-      {isLeader && (
-        <div className="mb-6 flex items-center gap-2">
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleInvite();
-            }}
-            placeholder="email@company.com"
-            className="w-64 rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
-          />
-          <button
-            onClick={handleInvite}
-            disabled={inviting || !inviteEmail.trim()}
-            className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-40"
-          >
-            {inviting ? "Sending..." : "Invite Member"}
-          </button>
-        </div>
-      )}
+      <div className="mb-6 rounded-md border border-zinc-700 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-400">
+        <p>
+          New team members? Share the signup link:{" "}
+          <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-white">
+            /signup
+          </span>
+        </p>
+      </div>
 
       <div className="rounded-lg border border-zinc-800">
         <table className="w-full">
