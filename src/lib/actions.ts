@@ -5,11 +5,17 @@ import { createClient } from "@/lib/supabase/server";
 
 function computeDeadline(month: number, year: number, day: number | null): string | null {
   if (!day) return null;
-  const lastDay = new Date(year, month, 0).getDate();
+  let nextMonth = month + 1;
+  let nextYear = year;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+  const lastDay = new Date(nextYear, nextMonth, 0).getDate();
   const clamped = Math.min(day, lastDay);
-  const m = String(month).padStart(2, "0");
+  const m = String(nextMonth).padStart(2, "0");
   const d = String(clamped).padStart(2, "0");
-  return `${year}-${m}-${d}`;
+  return `${nextYear}-${m}-${d}`;
 }
 
 export async function generatePeriodForClientAction(
@@ -62,6 +68,7 @@ export async function generatePeriodForClientAction(
     stage_name: t.stage_name,
     order_index: t.order_index,
     status: "not_started",
+    internal_deadline: deadline,
   }));
 
   await supabase.from("period_stages").insert(stages);
@@ -160,6 +167,7 @@ export async function generateNextMonthAction() {
       stage_name: t.stage_name,
       order_index: t.order_index,
       status: "not_started",
+      internal_deadline: deadline,
     }));
 
     await supabase.from("period_stages").insert(stages);
