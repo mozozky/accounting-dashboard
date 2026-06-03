@@ -173,3 +173,47 @@ export async function createCustomTaskType(clientId: string, name: string) {
   revalidatePath("/clients/[clientId]/settings");
   return { success: true, taskType };
 }
+
+export async function unassignTaskTypeFromClient(
+  clientId: string,
+  taskTypeId: string
+): Promise<{ error?: string; success?: boolean }> {
+
+  try {
+    const supabase = await createClient();
+
+    const { data: taskType } = await supabase
+      .from("task_types")
+      .select("id, is_builtin, client_id")
+      .eq("id", taskTypeId)
+      .single();
+
+    const { data: periodIds } = await supabase
+      .from("client_periods")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("task_type_id", taskTypeId);
+
+    if (periodIds && periodIds.length > 0) {
+      const ids = periodIds.map((p) => p.id);
+      await supabase.from("period_stages").delete().in("period_id", ids);
+      await supabase.from("client_periods").delete().in("id", ids);
+    }
+
+    await supabase
+      .from("stage_templates")
+      .delete()
+      .eq("client_id", clientId)
+      .eq("task_type_id", taskTypeId);
+
+    if (taskType && !taskType.is_builtin) {
+      await supabase.from("task_types").delete().eq("id", taskTypeId);
+    }
+
+    revalidatePath("/clients/[clientId]/settings");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : "Failed to unassign task type" };
+  }
+}

@@ -50,7 +50,8 @@ function parseCSV(content: string): string[][] {
 }
 
 export async function importClientsCSV(csvContent: string) {
-  const rows = parseCSV(csvContent);
+  const sanitized = csvContent.replace(/^\uFEFF/, "");
+  const rows = parseCSV(sanitized);
 
   if (rows.length < 2) {
     return { error: "CSV is empty or has no data rows" };
@@ -101,7 +102,7 @@ export async function importClientsCSV(csvContent: string) {
       .from("clients")
       .select("id")
       .eq("name", name)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       skipped++;

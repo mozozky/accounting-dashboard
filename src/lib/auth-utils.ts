@@ -22,8 +22,6 @@ export async function ensureUserProfile(user: User) {
       .from("profiles")
       .update({
         email: user.email,
-        full_name:
-          user.user_metadata?.full_name || user.email || null,
       })
       .eq("id", user.id);
   }

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { assignTaskTypeToClientAction } from "@/lib/actions";
-import { createCustomTaskType } from "@/lib/settings-actions";
+import { createCustomTaskType, unassignTaskTypeFromClient } from "@/lib/settings-actions";
 
 interface TaskTypeInfo {
   id: string;
@@ -26,6 +26,7 @@ export default function AssignTaskTypePanel({
   const [localAssigned, setLocalAssigned] = useState(propsAssigned);
   const [localAvailable, setLocalAvailable] = useState(propsAvailable);
   const [loading, setLoading] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const [customName, setCustomName] = useState("");
   const [creating, setCreating] = useState(false);
   const [needsRefresh, setNeedsRefresh] = useState(false);
@@ -54,6 +55,19 @@ export default function AssignTaskTypePanel({
       setLocalAvailable((prev) => [...prev, item]);
       toast.error(result.error);
     } else {
+      setNeedsRefresh(true);
+    }
+  };
+
+  const handleRemove = async (taskTypeId: string) => {
+    if (!confirm("Remove this task type? All stages, periods, and checklists will be deleted.")) return;
+    setRemoving(taskTypeId);
+    const result = await unassignTaskTypeFromClient(clientId, taskTypeId);
+    setRemoving(null);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      setLocalAssigned((prev) => prev.filter((t) => t.id !== taskTypeId));
       setNeedsRefresh(true);
     }
   };
@@ -95,7 +109,16 @@ export default function AssignTaskTypePanel({
               <div className="h-2 w-2 rounded-full bg-emerald-500" />
               <span className="text-sm text-white">{tt.name}</span>
             </div>
-            <span className="text-xs text-zinc-600">Assigned</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-600">Assigned</span>
+              <button
+                onClick={() => handleRemove(tt.id)}
+                disabled={removing === tt.id}
+                className="rounded px-2 py-0.5 text-xs text-red-400 transition-colors hover:bg-red-950/30 disabled:opacity-50"
+              >
+                {removing === tt.id ? "..." : "Remove"}
+              </button>
+            </div>
           </div>
         ))}
         {localAssigned.length === 0 && (
