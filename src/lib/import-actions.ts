@@ -65,7 +65,9 @@ function parseCSV(content: string): string[][] {
 }
 
 export async function importClientsCSV(csvContent: string) {
-  const sanitized = csvContent.replace(/^\uFEFF/, "");
+  const sanitized = csvContent
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n?/g, "\n");
   const rows = parseCSV(sanitized);
 
   if (rows.length < 2) {

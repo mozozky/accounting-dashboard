@@ -4,4 +4,4 @@
 -- ============================================================
 
 alter table stage_templates
-  add column if not exists default_deadline_day int check (default_deadline_day 15);
+  add column if not exists default_deadline_day int check (default_deadline_day between 1 and 31);
