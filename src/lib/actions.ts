@@ -38,10 +38,10 @@ export async function generatePeriodForClientAction(
     return { error: "No active stage templates for this client + task type" };
   }
 
-  const deadline = computeDeadline(
+  const hardDeadline = computeDeadline(
     month,
     year,
-    templates[0]?.default_deadline_day ?? null
+    templates[0]?.hard_deadline_day ?? null
   );
 
   const { data: period, error: periodError } = await supabase
@@ -51,7 +51,7 @@ export async function generatePeriodForClientAction(
       task_type_id: taskTypeId,
       period_month: month,
       period_year: year,
-      hard_deadline: deadline,
+      hard_deadline: hardDeadline,
     })
     .select()
     .single();
@@ -68,7 +68,7 @@ export async function generatePeriodForClientAction(
     stage_name: t.stage_name,
     order_index: t.order_index,
     status: "not_started",
-    internal_deadline: deadline,
+    internal_deadline: computeDeadline(month, year, t.default_deadline_day ?? null),
   }));
 
   await supabase.from("period_stages").insert(stages);
@@ -139,10 +139,10 @@ export async function generateNextMonthAction() {
       continue;
     }
 
-    const deadline = computeDeadline(
+    const hardDeadline = computeDeadline(
       nextMonth,
       nextYear,
-      templates[0]?.default_deadline_day ?? null
+      templates[0]?.hard_deadline_day ?? null
     );
 
     const { data: period } = await supabase
@@ -152,7 +152,7 @@ export async function generateNextMonthAction() {
         task_type_id: taskTypeId,
         period_month: nextMonth,
         period_year: nextYear,
-        hard_deadline: deadline,
+        hard_deadline: hardDeadline,
       })
       .select()
       .single();
@@ -167,7 +167,7 @@ export async function generateNextMonthAction() {
       stage_name: t.stage_name,
       order_index: t.order_index,
       status: "not_started",
-      internal_deadline: deadline,
+      internal_deadline: computeDeadline(nextMonth, nextYear, t.default_deadline_day ?? null),
     }));
 
     await supabase.from("period_stages").insert(stages);

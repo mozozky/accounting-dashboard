@@ -144,7 +144,7 @@ export async function importClientsCSV(csvContent: string) {
     for (const tt of builtInTaskTypes ?? []) {
       const { data: defaultStages } = await supabase
         .from("stage_templates")
-        .select("stage_name, order_index, is_billable, default_deadline_day")
+        .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day")
         .eq("task_type_id", tt.id)
         .is("client_id", null)
         .eq("is_active", true)
@@ -152,7 +152,7 @@ export async function importClientsCSV(csvContent: string) {
 
       if (!defaultStages || defaultStages.length === 0) continue;
 
-      const deadlineDay = defaultStages[0]?.default_deadline_day ?? null;
+      const hardDeadlineDay = defaultStages[0]?.hard_deadline_day ?? null;
 
       const stageInserts = defaultStages.map((s) => ({
         client_id: client.id,
@@ -161,7 +161,8 @@ export async function importClientsCSV(csvContent: string) {
         order_index: s.order_index,
         is_billable: s.is_billable,
         is_active: true,
-        default_deadline_day: deadlineDay,
+        hard_deadline_day: hardDeadlineDay,
+        default_deadline_day: s.default_deadline_day ?? null,
       }));
 
       await supabase.from("stage_templates").upsert(stageInserts, {
@@ -169,7 +170,7 @@ export async function importClientsCSV(csvContent: string) {
       });
 
       // Create period for current month
-      const deadline = computeDeadline(month, year, deadlineDay);
+      const hardDeadline = computeDeadline(month, year, hardDeadlineDay);
 
       const { data: period } = await supabase
         .from("client_periods")
@@ -178,19 +179,19 @@ export async function importClientsCSV(csvContent: string) {
           task_type_id: tt.id,
           period_month: month,
           period_year: year,
-          hard_deadline: deadline,
+          hard_deadline: hardDeadline,
         })
         .select()
         .single();
 
       if (!period) continue;
 
-      const stageSnapshots = stageInserts.map((s) => ({
+      const stageSnapshots = defaultStages.map((s) => ({
         period_id: period.id,
         stage_name: s.stage_name,
         order_index: s.order_index,
         status: "not_started",
-        internal_deadline: deadline,
+        internal_deadline: computeDeadline(month, year, s.default_deadline_day ?? null),
       }));
 
       await supabase.from("period_stages").insert(stageSnapshots);

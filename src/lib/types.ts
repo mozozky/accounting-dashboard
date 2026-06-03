@@ -42,6 +42,7 @@ export interface StageTemplate {
   order_index: number;
   is_billable: boolean;
   is_active: boolean;
+  hard_deadline_day: number | null;
   default_deadline_day: number | null;
 }
 

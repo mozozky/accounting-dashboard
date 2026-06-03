@@ -60,7 +60,7 @@ export async function addClient(formData: FormData) {
     // Copy default stages to client
     const { data: defaultStages } = await supabase
       .from("stage_templates")
-      .select("stage_name, order_index, is_billable, default_deadline_day")
+      .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day")
       .eq("task_type_id", tt.id)
       .is("client_id", null)
       .eq("is_active", true)
@@ -68,7 +68,7 @@ export async function addClient(formData: FormData) {
 
     if (!defaultStages || defaultStages.length === 0) continue;
 
-    const deadlineDay = defaultStages[0]?.default_deadline_day ?? null;
+    const hardDeadlineDay = defaultStages[0]?.hard_deadline_day ?? null;
     const stageInserts = defaultStages.map((s) => ({
       client_id: client.id,
       task_type_id: tt.id,
@@ -76,7 +76,8 @@ export async function addClient(formData: FormData) {
       order_index: s.order_index,
       is_billable: s.is_billable,
       is_active: true,
-      default_deadline_day: deadlineDay,
+      hard_deadline_day: hardDeadlineDay,
+      default_deadline_day: s.default_deadline_day ?? null,
     }));
 
     await supabase.from("stage_templates").upsert(stageInserts, {
@@ -84,7 +85,7 @@ export async function addClient(formData: FormData) {
     });
 
     // Create period for current month
-    const deadline = computeDeadline(month, year, deadlineDay);
+    const hardDeadline = computeDeadline(month, year, hardDeadlineDay);
 
     const { data: period } = await supabase
       .from("client_periods")
@@ -93,19 +94,19 @@ export async function addClient(formData: FormData) {
         task_type_id: tt.id,
         period_month: month,
         period_year: year,
-        hard_deadline: deadline,
+        hard_deadline: hardDeadline,
       })
       .select()
       .single();
 
     if (!period) continue;
 
-    const stageSnapshots = stageInserts.map((s) => ({
+    const stageSnapshots = defaultStages.map((s) => ({
       period_id: period.id,
       stage_name: s.stage_name,
       order_index: s.order_index,
       status: "not_started",
-      internal_deadline: deadline,
+      internal_deadline: computeDeadline(month, year, s.default_deadline_day ?? null),
     }));
 
     await supabase.from("period_stages").insert(stageSnapshots);

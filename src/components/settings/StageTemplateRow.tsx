@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { updateStageDeadlineDay } from "@/lib/settings-actions";
 
 interface StageTemplateData {
   id: string;
@@ -10,6 +11,7 @@ interface StageTemplateData {
   order_index: number;
   is_billable: boolean;
   is_active: boolean;
+  default_deadline_day: number | null;
 }
 
 interface Props {
@@ -29,6 +31,9 @@ export default function StageTemplateRow({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(stage.stage_name);
+  const [deadlineVal, setDeadlineVal] = useState(
+    stage.default_deadline_day ? String(stage.default_deadline_day) : ""
+  );
 
   const {
     attributes,
@@ -52,6 +57,13 @@ export default function StageTemplateRow({
       setDraft(stage.stage_name);
     }
     setEditing(false);
+  };
+
+  const handleDeadlineChange = (value: string) => {
+    setDeadlineVal(value);
+    const num = value ? parseInt(value) : null;
+    if (num && (num < 1 || num > 31)) return;
+    updateStageDeadlineDay(stage.id, num);
   };
 
   return (
@@ -125,6 +137,17 @@ export default function StageTemplateRow({
         />
         Active
       </label>
+
+      <input
+        type="number"
+        min={1}
+        max={31}
+        value={deadlineVal}
+        onChange={(e) => handleDeadlineChange(e.target.value)}
+        placeholder="D"
+        className="w-10 rounded border border-zinc-700 bg-zinc-800 px-1 py-0.5 text-xs text-white text-center focus:border-zinc-500 focus:outline-none"
+        title="Deadline day"
+      />
 
       <button
         onClick={() => onDelete(stage.id)}

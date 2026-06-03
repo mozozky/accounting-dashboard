@@ -218,7 +218,7 @@ export async function unassignTaskTypeFromClient(
   }
 }
 
-export async function updateDefaultDeadlineDay(
+export async function updateHardDeadlineDay(
   clientId: string,
   taskTypeId: string,
   day: number | null
@@ -226,9 +226,24 @@ export async function updateDefaultDeadlineDay(
   const supabase = await createClient();
   const { error } = await supabase
     .from("stage_templates")
-    .update({ default_deadline_day: day })
+    .update({ hard_deadline_day: day })
     .eq("client_id", clientId)
     .eq("task_type_id", taskTypeId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true };
+}
+
+export async function updateStageDeadlineDay(
+  stageId: string,
+  day: number | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stage_templates")
+    .update({ default_deadline_day: day })
+    .eq("id", stageId);
 
   if (error) return { error: error.message };
   revalidatePath("/clients/[clientId]/settings");
