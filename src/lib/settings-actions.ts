@@ -249,3 +249,41 @@ export async function updateStageDeadlineDay(
   revalidatePath("/clients/[clientId]/settings");
   return { success: true };
 }
+
+export async function addTaskTemplate(
+  templateId: string,
+  label: string
+) {
+  const supabase = await createClient();
+  const { data: last } = await supabase
+    .from("stage_task_templates")
+    .select("order_index")
+    .eq("template_id", templateId)
+    .order("order_index", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextOrder = (last?.order_index ?? -1) + 1;
+
+  const { data: task, error } = await supabase
+    .from("stage_task_templates")
+    .insert({ template_id: templateId, label, order_index: nextOrder })
+    .select()
+    .single();
+
+  if (error || !task) return { error: error?.message ?? "Failed" };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true, task };
+}
+
+export async function deleteTaskTemplate(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stage_task_templates")
+    .delete()
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true };
+}

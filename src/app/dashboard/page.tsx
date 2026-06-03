@@ -226,6 +226,17 @@ export default async function DashboardPage({
     .filter(Boolean) as ClientRow[];
 
   clientRows.sort((a, b) => {
+    const urgency: Record<string, number> = {
+      blocked: 0,
+      overdue: 1,
+      in_progress: 2,
+      not_started: 3,
+      done: 4,
+      no_period: 5,
+    };
+    const urgA = urgency[a.status] ?? 99;
+    const urgB = urgency[b.status] ?? 99;
+    if (urgA !== urgB) return urgA - urgB;
     if (a.clientName !== b.clientName)
       return a.clientName.localeCompare(b.clientName);
     return a.taskTypeName.localeCompare(b.taskTypeName);

@@ -73,6 +73,34 @@ export async function generatePeriodForClientAction(
 
   await supabase.from("period_stages").insert(stages);
 
+  const { data: newStages } = await supabase
+    .from("period_stages")
+    .select("id, order_index")
+    .eq("period_id", period.id)
+    .order("order_index");
+
+  if (newStages && templates) {
+    for (let i = 0; i < templates.length; i++) {
+      const stage = newStages[i];
+      if (!stage) continue;
+      const { data: tmpls } = await supabase
+        .from("stage_task_templates")
+        .select("label, order_index")
+        .eq("template_id", templates[i].id)
+        .order("order_index");
+
+      if (tmpls && tmpls.length > 0) {
+        await supabase.from("stage_tasks").insert(
+          tmpls.map((t) => ({
+            stage_id: stage.id,
+            label: t.label,
+            order_index: t.order_index,
+          }))
+        );
+      }
+    }
+  }
+
   revalidatePath("/dashboard");
   return { success: true };
 }
@@ -171,6 +199,35 @@ export async function generateNextMonthAction() {
     }));
 
     await supabase.from("period_stages").insert(stages);
+
+    const { data: newStages } = await supabase
+      .from("period_stages")
+      .select("id, order_index")
+      .eq("period_id", period.id)
+      .order("order_index");
+
+    if (newStages && templates) {
+      for (let i = 0; i < templates.length; i++) {
+        const stage = newStages[i];
+        if (!stage) continue;
+        const { data: tmpls } = await supabase
+          .from("stage_task_templates")
+          .select("label, order_index")
+          .eq("template_id", templates[i].id)
+          .order("order_index");
+
+        if (tmpls && tmpls.length > 0) {
+          await supabase.from("stage_tasks").insert(
+            tmpls.map((t) => ({
+              stage_id: stage.id,
+              label: t.label,
+              order_index: t.order_index,
+            }))
+          );
+        }
+      }
+    }
+
     created++;
   }
 
@@ -233,5 +290,38 @@ export async function assignTaskTypeToClientAction(
 
   revalidatePath("/dashboard");
   revalidatePath("/clients/[clientId]/settings", "layout");
+  return { success: true };
+}
+
+export async function bulkAdvanceStage(periodIds: string[], status: string): Promise<{ error?: string; success?: boolean }> {
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+
+  const { data: currentUser } = await supabase.auth.getUser();
+  const userId = currentUser?.user?.id;
+
+  for (const periodId of periodIds) {
+    const { data: stages } = await supabase
+      .from("period_stages")
+      .select("id, status")
+      .eq("period_id", periodId)
+      .neq("status", "done")
+      .order("order_index")
+      .limit(1);
+
+    if (stages && stages[0]) {
+      const updateData: Record<string, unknown> = {
+        status,
+        updated_at: now,
+      };
+      if (status === "done") {
+        updateData.completed_at = now;
+        updateData.completed_by_user_id = userId ?? null;
+      }
+      await supabase.from("period_stages").update(updateData).eq("id", stages[0].id);
+    }
+  }
+
+  revalidatePath("/dashboard");
   return { success: true };
 }

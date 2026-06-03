@@ -195,6 +195,41 @@ export async function importClientsCSV(csvContent: string) {
       }));
 
       await supabase.from("period_stages").insert(stageSnapshots);
+
+      const { data: newStages } = await supabase
+        .from("period_stages")
+        .select("id, order_index")
+        .eq("period_id", period.id)
+        .order("order_index");
+
+      const { data: clientTemplates } = await supabase
+        .from("stage_templates")
+        .select("id, order_index")
+        .eq("client_id", client.id)
+        .eq("task_type_id", tt.id)
+        .order("order_index");
+
+      if (newStages && clientTemplates) {
+        for (const ct of clientTemplates) {
+          const ns = newStages.find((s) => s.order_index === ct.order_index);
+          if (!ns) continue;
+          const { data: tmpls } = await supabase
+            .from("stage_task_templates")
+            .select("label, order_index")
+            .eq("template_id", ct.id)
+            .order("order_index");
+
+          if (tmpls && tmpls.length > 0) {
+            await supabase.from("stage_tasks").insert(
+              tmpls.map((t) => ({
+                stage_id: ns.id,
+                label: t.label,
+                order_index: t.order_index,
+              }))
+            );
+          }
+        }
+      }
     }
 
     created++;

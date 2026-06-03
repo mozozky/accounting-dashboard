@@ -3,6 +3,30 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+async function logActivity(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  action: string,
+  entityType: string,
+  entityName?: string | null,
+  details?: string | null
+) {
+  const { data } = await supabase.auth.getUser();
+  if (!data?.user) return;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", data.user.id)
+    .single();
+  await supabase.from("activity_log").insert({
+    user_id: data.user.id,
+    user_name: profile?.full_name ?? data.user.email,
+    action,
+    entity_type: entityType,
+    entity_name: entityName ?? null,
+    details: details ?? null,
+  });
+}
+
 export async function updateStageStatus(stageId: string, status: string) {
   const supabase = await createClient();
 
@@ -26,6 +50,7 @@ export async function updateStageStatus(stageId: string, status: string) {
     .eq("id", stageId);
 
   if (error) return { error: error.message };
+  await logActivity(supabase, `Stage ${status}`, "period_stage", `Stage: ${status}`);
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   revalidatePath("/dashboard", "page");
   return { success: true };
@@ -101,6 +126,7 @@ export async function addStageTask(stageId: string, label: string) {
   });
 
   if (error) return { error: error.message };
+  await logActivity(supabase, "Task added", "stage_task", label);
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }

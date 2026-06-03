@@ -12,6 +12,7 @@ import StageProgressPopup, {
 import {
   generatePeriodForClientAction,
   generateNextMonthAction,
+  bulkAdvanceStage,
 } from "@/lib/actions";
 import type { StageStatus } from "@/lib/types";
 
@@ -54,6 +55,11 @@ export default function ClientsTable({
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [generatingAll, setGeneratingAll] = useState(false);
   const [popupRow, setPopupRow] = useState<ClientRow | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulking, setBulking] = useState(false);
+
+  const rowKey = (c: ClientRow) => `${c.clientId}-${c.taskTypeId}`;
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -91,6 +97,51 @@ export default function ClientsTable({
     const result = await generateNextMonthAction();
     setGeneratingAll(false);
     if (result.error && "error" in result) toast.error(result.error as string);
+  };
+
+  const toggleSelect = (key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const allKeys = new Set(filtered.map(rowKey));
+    setSelected(selected.size === allKeys.size ? new Set() : allKeys);
+  };
+
+  const handleBulkAction = async () => {
+    if (!bulkStatus || selected.size === 0) return;
+    setBulking(true);
+    const periodIds = Array.from(selected)
+      .map((k) => filtered.find((c) => rowKey(c) === k))
+      .filter(Boolean)
+      .map((c) => c!.periodId)
+      .filter(Boolean) as string[];
+
+    const result = await bulkAdvanceStage(periodIds, bulkStatus);
+    setBulking(false);
+    if (result.error) toast.error(result.error);
+    else {
+      toast.success(`Updated ${periodIds.length} period(s)`);
+      setSelected(new Set());
+      setBulkStatus("");
+    }
+  };
+
+  const getRowClasses = (c: ClientRow) => {
+    if (c.status === "overdue" || c.status === "blocked")
+      return "border-l-2 border-l-red-500 bg-red-950/10";
+    if (
+      c.hardDeadline &&
+      c.status !== "done" &&
+      c.status !== "no_period" &&
+      new Date(c.hardDeadline) <= new Date(Date.now() + 7 * 86400000)
+    )
+      return "border-l-2 border-l-amber-500 bg-amber-950/10";
+    return "";
   };
 
   return (
@@ -155,10 +206,41 @@ export default function ClientsTable({
         </button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded border border-zinc-700 bg-zinc-800/50 px-3 py-2">
+          <span className="text-xs text-zinc-400">{selected.size} selected</span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value)}
+            className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white"
+          >
+            <option value="">Set status...</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+            <option value="blocked">Blocked</option>
+          </select>
+          <button
+            onClick={handleBulkAction}
+            disabled={!bulkStatus || bulking}
+            className="rounded bg-white px-2 py-1 text-xs font-medium text-black hover:bg-zinc-200 disabled:opacity-40"
+          >
+            {bulking ? "..." : "Apply"}
+          </button>
+        </div>
+      )}
+
       <div className="rounded-lg border border-zinc-800">
         <table className="w-full">
           <thead>
             <tr className="border-b border-zinc-800 text-left text-xs font-medium text-zinc-500">
+              <th className="w-8 px-2 py-3">
+                <input
+                  type="checkbox"
+                  checked={selected.size > 0 && selected.size === filtered.length}
+                  onChange={toggleSelectAll}
+                  className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
+                />
+              </th>
               <th className="px-4 py-3">Client</th>
               <th className="px-4 py-3">Task Type</th>
               <th className="px-4 py-3">PIC</th>
@@ -171,12 +253,20 @@ export default function ClientsTable({
           <tbody>
             {filtered.map((client, i) => (
               <motion.tr
-                key={`${client.clientId}-${client.taskTypeId}`}
+                key={rowKey(client)}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: i * 0.03 }}
-                className="border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50"
+                className={`border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50 ${getRowClasses(client)}`}
               >
+                <td className="w-8 px-2 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(rowKey(client))}
+                    onChange={() => toggleSelect(rowKey(client))}
+                    className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
+                  />
+                </td>
                 <td className="px-4 py-3 font-medium">
                   {client.hasPeriod ? (
                     <Link
@@ -239,7 +329,7 @@ export default function ClientsTable({
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-4 py-8 text-center text-sm text-zinc-500"
                 >
                   No clients found

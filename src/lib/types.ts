@@ -81,3 +81,21 @@ export interface ClientWithPeriod extends Client {
   stages: PeriodStage[] | null;
   stageProgress: { done: number; total: number } | null;
 }
+
+export interface StageTaskTemplate {
+  id: string;
+  template_id: string;
+  label: string;
+  order_index: number;
+}
+
+export interface ActivityLog {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  action: string;
+  entity_type: string;
+  entity_name: string | null;
+  details: string | null;
+  created_at: string;
+}
