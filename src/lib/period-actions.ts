@@ -27,6 +27,31 @@ async function logActivity(
   });
 }
 
+type StageContext = {
+  stageName: string;
+  clientName: string;
+  taskTypeName: string;
+};
+
+async function getStageContext(supabase: Awaited<ReturnType<typeof createClient>>, stageId: string): Promise<StageContext | null> {
+  const { data: stage } = await supabase
+    .from("period_stages")
+    .select("stage_name, period:period_id(client:client_id(name), task_type:task_type_id(name))")
+    .eq("id", stageId)
+    .single();
+
+  if (!stage) return null;
+  const period = stage.period as unknown as {
+    client: { name: string } | null;
+    task_type: { name: string } | null;
+  } | null;
+  return {
+    stageName: stage.stage_name,
+    clientName: period?.client?.name ?? "",
+    taskTypeName: period?.task_type?.name ?? "",
+  };
+}
+
 export async function updateStageStatus(stageId: string, status: string) {
   const supabase = await createClient();
 
@@ -50,7 +75,18 @@ export async function updateStageStatus(stageId: string, status: string) {
     .eq("id", stageId);
 
   if (error) return { error: error.message };
-  await logActivity(supabase, `Stage ${status}`, "period_stage", `Stage: ${status}`);
+
+  const ctx = await getStageContext(supabase, stageId);
+  if (ctx) {
+    await logActivity(
+      supabase,
+      `Stage ${status.replace(/_/g, " ")}`,
+      "period_stage",
+      ctx.stageName,
+      `${ctx.clientName} · ${ctx.taskTypeName}`
+    );
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   revalidatePath("/dashboard", "page");
   return { success: true };
@@ -67,6 +103,13 @@ export async function updateStageDeadline(stageId: string, deadline: string | nu
     .eq("id", stageId);
 
   if (error) return { error: error.message };
+
+  const ctx = await getStageContext(supabase, stageId);
+  if (ctx && deadline) {
+    const formatted = new Date(deadline).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+    await logActivity(supabase, "Deadline updated", "period_stage", ctx.stageName, `${ctx.clientName} · ${ctx.taskTypeName} → ${formatted}`);
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
@@ -79,6 +122,17 @@ export async function updateStageAssignee(stageId: string, userId: string | null
     .eq("id", stageId);
 
   if (error) return { error: error.message };
+
+  const ctx = await getStageContext(supabase, stageId);
+  if (ctx) {
+    let assigneeName = "Unassigned";
+    if (userId) {
+      const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", userId).single();
+      assigneeName = profile?.full_name ?? userId;
+    }
+    await logActivity(supabase, "PIC changed", "period_stage", ctx.stageName, `${ctx.clientName} · ${ctx.taskTypeName} → ${assigneeName}`);
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
@@ -103,6 +157,21 @@ export async function updatePeriodDeadline(periodId: string, deadline: string | 
     .eq("id", periodId);
 
   if (error) return { error: error.message };
+
+  if (deadline) {
+    const { data: period } = await supabase
+      .from("client_periods")
+      .select("client:client_id(name), task_type:task_type_id(name)")
+      .eq("id", periodId)
+      .single();
+
+    if (period) {
+      const p = period as unknown as { client: { name: string } | null; task_type: { name: string } | null };
+      const formatted = new Date(deadline).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+      await logActivity(supabase, "Hard deadline updated", "client_period", `${p.client?.name ?? ""} · ${p.task_type?.name ?? ""}`, formatted);
+    }
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
@@ -126,31 +195,65 @@ export async function addStageTask(stageId: string, label: string) {
   });
 
   if (error) return { error: error.message };
-  await logActivity(supabase, "Task added", "stage_task", label);
+
+  const ctx = await getStageContext(supabase, stageId);
+  await logActivity(supabase, "Task added", "stage_task", label, ctx ? `${ctx.clientName} · ${ctx.taskTypeName} → ${ctx.stageName}` : null);
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
 
 export async function toggleStageTask(taskId: string, isDone: boolean) {
   const supabase = await createClient();
+
+  const { data: task } = await supabase
+    .from("stage_tasks")
+    .select("label, stage_id")
+    .eq("id", taskId)
+    .single();
+
   const { error } = await supabase
     .from("stage_tasks")
     .update({ is_done: isDone })
     .eq("id", taskId);
 
   if (error) return { error: error.message };
+
+  if (task) {
+    const ctx = await getStageContext(supabase, (task as { stage_id: string }).stage_id);
+    await logActivity(
+      supabase,
+      isDone ? "Task completed" : "Task reopened",
+      "stage_task",
+      (task as { label: string }).label,
+      ctx ? `${ctx.clientName} · ${ctx.taskTypeName} → ${ctx.stageName}` : null
+    );
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
 
 export async function deleteStageTask(taskId: string) {
   const supabase = await createClient();
+
+  const { data: task } = await supabase
+    .from("stage_tasks")
+    .select("label")
+    .eq("id", taskId)
+    .single();
+
   const { error } = await supabase
     .from("stage_tasks")
     .delete()
     .eq("id", taskId);
 
   if (error) return { error: error.message };
+
+  if (task) {
+    await logActivity(supabase, "Task deleted", "stage_task", (task as { label: string }).label);
+  }
+
   revalidatePath("/clients/[clientId]/[periodId]", "page");
   return { success: true };
 }
