@@ -217,3 +217,20 @@ export async function unassignTaskTypeFromClient(
     return { error: e instanceof Error ? e.message : "Failed to unassign task type" };
   }
 }
+
+export async function updateDefaultDeadlineDay(
+  clientId: string,
+  taskTypeId: string,
+  day: number | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stage_templates")
+    .update({ default_deadline_day: day })
+    .eq("client_id", clientId)
+    .eq("task_type_id", taskTypeId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true };
+}

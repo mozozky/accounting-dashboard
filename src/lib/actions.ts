@@ -3,6 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+function computeDeadline(month: number, year: number, day: number | null): string | null {
+  if (!day) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  const clamped = Math.min(day, lastDay);
+  const m = String(month).padStart(2, "0");
+  const d = String(clamped).padStart(2, "0");
+  return `${year}-${m}-${d}`;
+}
+
 export async function generatePeriodForClientAction(
   clientId: string,
   taskTypeId: string,
@@ -23,6 +32,12 @@ export async function generatePeriodForClientAction(
     return { error: "No active stage templates for this client + task type" };
   }
 
+  const deadline = computeDeadline(
+    month,
+    year,
+    templates[0]?.default_deadline_day ?? null
+  );
+
   const { data: period, error: periodError } = await supabase
     .from("client_periods")
     .insert({
@@ -30,6 +45,7 @@ export async function generatePeriodForClientAction(
       task_type_id: taskTypeId,
       period_month: month,
       period_year: year,
+      hard_deadline: deadline,
     })
     .select()
     .single();
@@ -102,19 +118,25 @@ export async function generateNextMonthAction() {
       continue;
     }
 
-    const { data: existing } = await supabase
+    const existing = await supabase
       .from("client_periods")
       .select("id")
       .eq("client_id", clientId)
       .eq("task_type_id", taskTypeId)
       .eq("period_month", nextMonth)
       .eq("period_year", nextYear)
-      .single();
+      .maybeSingle();
 
-    if (existing) {
+    if (existing.data) {
       skipped++;
       continue;
     }
+
+    const deadline = computeDeadline(
+      nextMonth,
+      nextYear,
+      templates[0]?.default_deadline_day ?? null
+    );
 
     const { data: period } = await supabase
       .from("client_periods")
@@ -123,6 +145,7 @@ export async function generateNextMonthAction() {
         task_type_id: taskTypeId,
         period_month: nextMonth,
         period_year: nextYear,
+        hard_deadline: deadline,
       })
       .select()
       .single();

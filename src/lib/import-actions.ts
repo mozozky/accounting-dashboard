@@ -3,6 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+function computeDeadline(month: number, year: number, day: number | null): string | null {
+  if (!day) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  const clamped = Math.min(day, lastDay);
+  const m = String(month).padStart(2, "0");
+  const d = String(clamped).padStart(2, "0");
+  return `${year}-${m}-${d}`;
+}
+
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = "";
@@ -129,13 +138,15 @@ export async function importClientsCSV(csvContent: string) {
     for (const tt of builtInTaskTypes ?? []) {
       const { data: defaultStages } = await supabase
         .from("stage_templates")
-        .select("stage_name, order_index, is_billable")
+        .select("stage_name, order_index, is_billable, default_deadline_day")
         .eq("task_type_id", tt.id)
         .is("client_id", null)
         .eq("is_active", true)
         .order("order_index");
 
       if (!defaultStages || defaultStages.length === 0) continue;
+
+      const deadlineDay = defaultStages[0]?.default_deadline_day ?? null;
 
       const stageInserts = defaultStages.map((s) => ({
         client_id: client.id,
@@ -144,6 +155,7 @@ export async function importClientsCSV(csvContent: string) {
         order_index: s.order_index,
         is_billable: s.is_billable,
         is_active: true,
+        default_deadline_day: deadlineDay,
       }));
 
       await supabase.from("stage_templates").upsert(stageInserts, {
@@ -151,6 +163,8 @@ export async function importClientsCSV(csvContent: string) {
       });
 
       // Create period for current month
+      const deadline = computeDeadline(month, year, deadlineDay);
+
       const { data: period } = await supabase
         .from("client_periods")
         .insert({
@@ -158,6 +172,7 @@ export async function importClientsCSV(csvContent: string) {
           task_type_id: tt.id,
           period_month: month,
           period_year: year,
+          hard_deadline: deadline,
         })
         .select()
         .single();

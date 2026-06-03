@@ -77,6 +77,7 @@ export default async function ClientSettingsPage({
     string,
     {
       taskTypeName: string;
+      defaultDeadlineDay: number | null;
       stages: {
         id: string;
         stage_name: string;
@@ -96,17 +97,17 @@ export default async function ClientSettingsPage({
       .order("order_index");
 
     for (const tt of allAssignedTaskTypes ?? []) {
+      const ttStages = (allStages ?? []).filter((s) => s.task_type_id === tt.id);
       taskTypeStageMap.set(tt.id, {
         taskTypeName: tt.name,
-        stages: (allStages ?? [])
-          .filter((s) => s.task_type_id === tt.id)
-          .map((s) => ({
-            id: s.id,
-            stage_name: s.stage_name,
-            order_index: s.order_index,
-            is_billable: s.is_billable,
-            is_active: s.is_active,
-          })),
+        defaultDeadlineDay: ttStages[0]?.default_deadline_day ?? null,
+        stages: ttStages.map((s) => ({
+          id: s.id,
+          stage_name: s.stage_name,
+          order_index: s.order_index,
+          is_billable: s.is_billable,
+          is_active: s.is_active,
+        })),
       });
     }
   }
@@ -158,13 +159,14 @@ export default async function ClientSettingsPage({
         </h2>
         <div className="space-y-4">
           {Array.from(taskTypeStageMap.entries()).map(
-            ([taskTypeId, { taskTypeName, stages }]) => (
+            ([taskTypeId, { taskTypeName, stages, defaultDeadlineDay }]) => (
               <StageTemplateEditor
                 key={taskTypeId}
                 clientId={params.clientId}
                 taskTypeName={taskTypeName}
                 taskTypeId={taskTypeId}
                 stages={stages}
+                defaultDeadlineDay={defaultDeadlineDay}
               />
             )
           )}

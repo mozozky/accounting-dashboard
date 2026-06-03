@@ -42,6 +42,7 @@ export interface StageTemplate {
   order_index: number;
   is_billable: boolean;
   is_active: boolean;
+  default_deadline_day: number | null;
 }
 
 export interface ClientPeriod {

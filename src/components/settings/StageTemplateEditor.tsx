@@ -22,6 +22,7 @@ import {
   deleteStageTemplate,
   reorderStageTemplates,
   addStageTemplate,
+  updateDefaultDeadlineDay,
 } from "@/lib/settings-actions";
 
 interface StageData {
@@ -37,6 +38,7 @@ interface Props {
   taskTypeName: string;
   taskTypeId: string;
   stages: StageData[];
+  defaultDeadlineDay: number | null;
 }
 
 export default function StageTemplateEditor({
@@ -44,10 +46,14 @@ export default function StageTemplateEditor({
   taskTypeName,
   taskTypeId,
   stages: initialStages,
+  defaultDeadlineDay: initialDeadlineDay,
 }: Props) {
   const [stages, setStages] = useState(initialStages);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deadlineDay, setDeadlineDay] = useState(
+    initialDeadlineDay ? String(initialDeadlineDay) : ""
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -152,6 +158,15 @@ export default function StageTemplateEditor({
     []
   );
 
+  const handleDeadlineChange = async (value: string) => {
+    setDeadlineDay(value);
+    const num = value ? parseInt(value) : null;
+    if (num && (num < 1 || num > 31)) return;
+    setSaving(true);
+    await updateDefaultDeadlineDay(clientId, taskTypeId, num);
+    setSaving(false);
+  };
+
   const handleAdd = async () => {
     if (!newName.trim()) return;
     const name = newName.trim();
@@ -183,6 +198,18 @@ export default function StageTemplateEditor({
           <p className="text-xs text-zinc-500">
             {activeStages.length} active stages
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-zinc-500">Default Deadline Day</label>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={deadlineDay}
+            onChange={(e) => handleDeadlineChange(e.target.value)}
+            placeholder="-"
+            className="w-14 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white text-center focus:border-zinc-500 focus:outline-none"
+          />
         </div>
       </div>
 
