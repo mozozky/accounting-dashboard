@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { StageStatus } from "@/lib/types";
+import MonthSwitcher from "@/components/dashboard/MonthSwitcher";
 
 function getStageColor(status: StageStatus): string {
   switch (status) {
@@ -13,13 +14,19 @@ function getStageColor(status: StageStatus): string {
 
 export default async function ClientDetailPage({
   params,
+  searchParams,
 }: {
   params: { clientId: string };
+  searchParams: { month?: string; year?: string };
 }) {
   const supabase = await createClient();
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
+
+  const month = parseInt(searchParams?.month ?? "") || currentMonth;
+  const year = parseInt(searchParams?.year ?? "") || currentYear;
+  const clampedMonth = Math.max(1, Math.min(12, month));
 
   const { data: client } = await supabase
     .from("clients")
@@ -60,8 +67,8 @@ export default async function ClientDetailPage({
     .from("client_periods")
     .select("id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index)")
     .eq("client_id", params.clientId)
-    .eq("period_month", currentMonth)
-    .eq("period_year", currentYear);
+    .eq("period_month", clampedMonth)
+    .eq("period_year", year);
 
   const periodByTaskType = new Map(
     (periods ?? []).map((p) => [p.task_type_id, p])
@@ -96,90 +103,96 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      <div className="mb-6">
-        <h2 className="mb-4 text-sm font-semibold text-zinc-300">
-          {new Date().toLocaleDateString("id-ID", {
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-300">
+          {new Date(year, clampedMonth - 1).toLocaleDateString("id-ID", {
             month: "long",
             year: "numeric",
           })}
         </h2>
-        <div className="space-y-3">
-          {Array.from(taskTypeMap.values()).map((taskType) => {
-            const period = periodByTaskType.get(taskType.id);
-            const stages = period?.period_stages ?? [];
-            const done = stages.filter(
-              (s: { status: string }) => s.status === "done"
-            ).length;
+        <MonthSwitcher
+          month={clampedMonth}
+          year={year}
+          baseUrl={`/clients/${params.clientId}`}
+        />
+      </div>
 
-            return (
-              <div
-                key={taskType.id}
-                className="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-white">
-                    {taskType.name}
-                  </h3>
-                  {period ? (
-                    <span className="text-xs text-zinc-500">
-                      {done}/{stages.length} done
-                    </span>
-                  ) : (
-                    <span className="text-xs text-zinc-600">No period</span>
-                  )}
-                </div>
+      <div className="space-y-3">
+        {Array.from(taskTypeMap.values()).map((taskType) => {
+          const period = periodByTaskType.get(taskType.id);
+          const stages = period?.period_stages ?? [];
+          const done = stages.filter(
+            (s: { status: string }) => s.status === "done"
+          ).length;
 
-                {stages.length > 0 && (
-                  <div className="mb-4 flex items-center gap-1">
-                    {stages
-                      .sort(
-                        (a: { order_index: number }, b: { order_index: number }) =>
-                          a.order_index - b.order_index
-                      )
-                      .map(
-                        (
-                          stage: {
-                            id: string;
-                            status: StageStatus;
-                            stage_name: string;
-                            order_index: number;
-                          },
-                          i: number
-                        ) => (
-                          <div key={stage.id} className="flex items-center gap-1">
-                            <div
-                              className={`h-2 w-2 rounded-full ${getStageColor(stage.status)}`}
-                              title={`${stage.stage_name}: ${stage.status}`}
-                            />
-                            {i < stages.length - 1 && (
-                              <div className="h-px w-4 bg-zinc-700" />
-                            )}
-                          </div>
-                        )
-                      )}
-                  </div>
+          return (
+            <div
+              key={taskType.id}
+              className="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-white">
+                  {taskType.name}
+                </h3>
+                {period ? (
+                  <span className="text-xs text-zinc-500">
+                    {done}/{stages.length} done
+                  </span>
+                ) : (
+                  <span className="text-xs text-zinc-600">No period</span>
                 )}
-
-                <div className="flex items-center gap-2">
-                  {period && (
-                    <Link
-                      href={`/clients/${params.clientId}/${period.id}`}
-                      className="rounded-md bg-white px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-200"
-                    >
-                      Buka Period
-                    </Link>
-                  )}
-                </div>
               </div>
-            );
-          })}
 
-          {taskTypeMap.size === 0 && (
-            <p className="text-sm text-zinc-500">
-              No task types assigned to this client yet.
-            </p>
-          )}
-        </div>
+              {stages.length > 0 && (
+                <div className="mb-4 flex items-center gap-1">
+                  {stages
+                    .sort(
+                      (a: { order_index: number }, b: { order_index: number }) =>
+                        a.order_index - b.order_index
+                    )
+                    .map(
+                      (
+                        stage: {
+                          id: string;
+                          status: StageStatus;
+                          stage_name: string;
+                          order_index: number;
+                        },
+                        i: number
+                      ) => (
+                        <div key={stage.id} className="flex items-center gap-1">
+                          <div
+                            className={`h-2 w-2 rounded-full ${getStageColor(stage.status)}`}
+                            title={`${stage.stage_name}: ${stage.status}`}
+                          />
+                          {i < stages.length - 1 && (
+                            <div className="h-px w-4 bg-zinc-700" />
+                          )}
+                        </div>
+                      )
+                    )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                {period && (
+                  <Link
+                    href={`/clients/${params.clientId}/${period.id}`}
+                    className="rounded-md bg-white px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-200"
+                  >
+                    Buka Period
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {taskTypeMap.size === 0 && (
+          <p className="text-sm text-zinc-500">
+            No task types assigned to this client yet.
+          </p>
+        )}
       </div>
     </div>
   );

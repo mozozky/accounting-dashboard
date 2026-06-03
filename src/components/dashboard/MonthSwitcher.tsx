@@ -9,9 +9,10 @@ const MONTH_NAMES = [
 interface Props {
   month: number;
   year: number;
+  baseUrl?: string;
 }
 
-export default function MonthSwitcher({ month, year }: Props) {
+export default function MonthSwitcher({ month, year, baseUrl = "/dashboard" }: Props) {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -20,7 +21,7 @@ export default function MonthSwitcher({ month, year }: Props) {
   return (
     <div className="flex items-center gap-3">
       <Link
-        href={`/dashboard?month=${prevMonth}&year=${prevYear}`}
+        href={`${baseUrl}?month=${prevMonth}&year=${prevYear}`}
         className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -33,7 +34,7 @@ export default function MonthSwitcher({ month, year }: Props) {
       </span>
 
       <Link
-        href={`/dashboard?month=${nextMonth}&year=${nextYear}`}
+        href={`${baseUrl}?month=${nextMonth}&year=${nextYear}`}
         className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
