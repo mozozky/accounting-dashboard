@@ -43,6 +43,30 @@ const BADGE_COLORS: Record<StageStatus, string> = {
   blocked: "bg-red-600 text-white",
 };
 
+function Spinner() {
+  return (
+    <svg
+      className="h-3 w-3 animate-spin text-zinc-400"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  );
+}
+
 export default function StageCard({
   stage,
   tasks,
@@ -57,6 +81,13 @@ export default function StageCard({
     stage.internal_deadline ?? ""
   );
   const [statusWarning, setStatusWarning] = useState(false);
+
+  // Per-field saving indicators
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [savingAssignee, setSavingAssignee] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [savingDeadline, setSavingDeadline] = useState(false);
+
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const notesTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -77,7 +108,19 @@ export default function StageCard({
       setStatusWarning(false);
     }
 
-    onChangeStatus(stage.id, newStatus);
+    setSavingStatus(true);
+    // onChangeStatus fires the server action; it resolves async in PeriodDetailClient
+    // We clear the spinner after a short settled delay (revalidatePath triggers reload)
+    Promise.resolve(onChangeStatus(stage.id, newStatus)).finally(() =>
+      setSavingStatus(false)
+    );
+  };
+
+  const handleAssigneeChange = (userId: string | null) => {
+    setSavingAssignee(true);
+    Promise.resolve(onChangeAssignee(stage.id, userId)).finally(() =>
+      setSavingAssignee(false)
+    );
   };
 
   const handleNotesChange = (value: string) => {
@@ -86,7 +129,10 @@ export default function StageCard({
 
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     notesTimerRef.current = setTimeout(() => {
-      onChangeNotes(stage.id, value || null);
+      setSavingNotes(true);
+      Promise.resolve(onChangeNotes(stage.id, value || null)).finally(() =>
+        setSavingNotes(false)
+      );
     }, 800);
   };
 
@@ -95,11 +141,15 @@ export default function StageCard({
 
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
     deadlineTimerRef.current = setTimeout(() => {
-      onChangeDeadline(stage.id, value || null);
+      setSavingDeadline(true);
+      Promise.resolve(onChangeDeadline(stage.id, value || null)).finally(() =>
+        setSavingDeadline(false)
+      );
     }, 800);
   };
 
-  const isBlockedWithoutNotes = stage.status === "blocked" && !notesDraft.trim();
+  const isBlockedWithoutNotes =
+    stage.status === "blocked" && !notesDraft.trim();
 
   return (
     <div
@@ -120,14 +170,21 @@ export default function StageCard({
           </span>
         </div>
 
+        {/* Status dropdown + per-card saving indicator */}
         <div className="flex items-center gap-2">
+          {savingStatus && <Spinner />}
           <select
             value={stage.status}
             onChange={(e) => handleStatusChange(e.target.value as StageStatus)}
-            className={`rounded border px-2 py-1 text-xs focus:outline-none ${STATUS_COLORS[stage.status]}`}
+            disabled={savingStatus}
+            className={`rounded border px-2 py-1 text-xs focus:outline-none transition-opacity ${STATUS_COLORS[stage.status]} ${savingStatus ? "cursor-not-allowed opacity-60" : ""}`}
           >
             {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-zinc-800 text-white">
+              <option
+                key={opt.value}
+                value={opt.value}
+                className="bg-zinc-800 text-white"
+              >
                 {opt.label}
               </option>
             ))}
@@ -142,38 +199,38 @@ export default function StageCard({
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-4">
+        {/* Internal Deadline */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">
+          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
             Internal Deadline
+            {savingDeadline && <Spinner />}
           </label>
           <input
             type="date"
             value={deadlineDraft}
             onChange={(e) => handleDeadlineChange(e.target.value)}
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none"
+            disabled={savingDeadline}
+            className={`w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none transition-opacity ${savingDeadline ? "opacity-60" : ""}`}
           />
         </div>
 
+        {/* Assignee */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">
+          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
             Assignee
+            {savingAssignee && <Spinner />}
           </label>
           <select
             value={stage.assignee_user_id ?? ""}
-            onChange={(e) =>
-              onChangeAssignee(stage.id, e.target.value || null)
-            }
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none"
+            onChange={(e) => handleAssigneeChange(e.target.value || null)}
+            disabled={savingAssignee}
+            className={`w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none transition-opacity ${savingAssignee ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <option value="" className="bg-zinc-800">
               Unassigned
             </option>
             {teamMembers.map((m) => (
-              <option
-                key={m.id}
-                value={m.id}
-                className="bg-zinc-800"
-              >
+              <option key={m.id} value={m.id} className="bg-zinc-800">
                 {m.full_name ?? m.id}
               </option>
             ))}
@@ -181,9 +238,11 @@ export default function StageCard({
         </div>
       </div>
 
+      {/* Notes */}
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-zinc-500">
+        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
           Notes
+          {savingNotes && <Spinner />}
         </label>
         <textarea
           ref={notesRef}
