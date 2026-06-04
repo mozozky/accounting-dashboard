@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireLeader } from "@/lib/auth-utils";
 
 function computeDeadline(month: number, year: number, day: number | null): string | null {
   if (!day) return null;
@@ -106,6 +107,9 @@ export async function generatePeriodForClientAction(
 }
 
 export async function generateNextMonthAction() {
+  const denied = await requireLeader();
+  if (denied) return { error: denied.error };
+
   const supabase = await createClient();
 
   const now = new Date();

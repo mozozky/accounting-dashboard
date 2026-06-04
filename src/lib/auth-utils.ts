@@ -8,7 +8,7 @@ export async function ensureUserProfile(user: User) {
     .from("profiles")
     .select("id")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   if (!existing) {
     await supabase.from("profiles").insert({
@@ -26,20 +26,41 @@ export async function ensureUserProfile(user: User) {
       .eq("id", user.id);
   }
 
-  const { data: existingRole } = await supabase
+  // Atomic, race-safe role assignment via SECURITY DEFINER RPC.
+  // First user ever => 'leader', everyone else => 'staff'. Idempotent.
+  await supabase.rpc("assign_user_role");
+}
+
+/**
+ * Returns the role ('leader' | 'staff') of the currently authenticated
+ * user, or null if unauthenticated / no role assigned.
+ */
+export async function getUserRole(): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return null;
+
+  const { data: roleData } = await supabase
     .from("user_roles")
     .select("role")
-    .eq("user_id", user.id)
-    .single();
+    .eq("user_id", data.user.id)
+    .maybeSingle();
 
-  if (!existingRole) {
-    const { count } = await supabase
-      .from("user_roles")
-      .select("*", { count: "exact", head: true });
+  return roleData?.role ?? null;
+}
 
-    await supabase.from("user_roles").insert({
-      user_id: user.id,
-      role: (count ?? 0) === 0 ? "leader" : "staff",
-    });
+/**
+ * Authorization guard for server actions. Returns an `{ error }` object
+ * if the caller is not a leader, or `null` if they are allowed to proceed.
+ *
+ * Usage:
+ *   const denied = await requireLeader();
+ *   if (denied) return denied;
+ */
+export async function requireLeader(): Promise<{ error: string } | null> {
+  const role = await getUserRole();
+  if (role !== "leader") {
+    return { error: "Only leaders can perform this action" };
   }
+  return null;
 }

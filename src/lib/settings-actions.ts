@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireLeader } from "@/lib/auth-utils";
 
 export async function updateClientInfo(
   clientId: string,
@@ -26,6 +27,9 @@ export async function updateClientInfo(
 }
 
 export async function archiveClient(clientId: string) {
+  const denied = await requireLeader();
+  if (denied) return { error: denied.error };
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("clients")
@@ -76,6 +80,9 @@ export async function upsertStageTemplate(
 }
 
 export async function deleteStageTemplate(id: string) {
+  const denied = await requireLeader();
+  if (denied) return { error: denied.error };
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("stage_templates")
@@ -178,6 +185,9 @@ export async function unassignTaskTypeFromClient(
   clientId: string,
   taskTypeId: string
 ): Promise<{ error?: string; success?: boolean }> {
+
+  const denied = await requireLeader();
+  if (denied) return { error: denied.error };
 
   try {
     const supabase = await createClient();

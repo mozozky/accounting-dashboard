@@ -5,7 +5,12 @@ import { ensureUserProfile } from "@/lib/auth-utils";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const nextParam = searchParams.get("next") ?? "/dashboard";
+  // Prevent open redirect: only allow internal, non-protocol-relative paths.
+  const next =
+    nextParam.startsWith("/") && !nextParam.startsWith("//")
+      ? nextParam
+      : "/dashboard";
   const supabase = await createClient();
 
   if (code) {

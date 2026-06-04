@@ -10,9 +10,23 @@ export async function signUp(
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const confirm = formData.get("confirm") as string;
+  const code = ((formData.get("code") as string) ?? "").trim();
 
   if (!email || !password) {
     return { error: "Email and password are required" };
+  }
+
+  // --- Signup gate (Opsi B): require a valid invite code ---
+  // Fail closed: if no code is configured on the server, signups are
+  // disabled entirely. Set SIGNUP_CODE in your environment to enable.
+  const expectedCode = process.env.SIGNUP_CODE;
+  if (!expectedCode) {
+    return {
+      error: "Signup is currently disabled. Please contact your administrator.",
+    };
+  }
+  if (code !== expectedCode) {
+    return { error: "Invalid invite code" };
   }
 
   if (password.length < 6) {
@@ -47,23 +61,8 @@ export async function signUp(
     password_set: true,
   });
 
-  // Assign role: staff (leader already exists from first user)
-  const { data: existingRole } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!existingRole) {
-    const { count } = await supabase
-      .from("user_roles")
-      .select("*", { count: "exact", head: true });
-
-    await supabase.from("user_roles").insert({
-      user_id: user.id,
-      role: (count ?? 0) === 0 ? "leader" : "staff",
-    });
-  }
+  // Atomic, race-safe role assignment (first user => leader, else staff).
+  await supabase.rpc("assign_user_role");
 
   redirect("/dashboard");
 }
