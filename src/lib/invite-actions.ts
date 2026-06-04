@@ -6,13 +6,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function removeMember(userId: string) {
   const supabase = await createClient();
+
+  // 1. Must be authenticated
   const { data: currentUser } = await supabase.auth.getUser();
   if (!currentUser?.user) return { error: "Not authenticated" };
 
+  // 2. Cannot remove yourself
   if (currentUser.user.id === userId) {
     return { error: "Cannot remove yourself" };
   }
 
+  // 3. Only leaders can remove members
   const { data: roleData } = await supabase
     .from("user_roles")
     .select("role")
@@ -23,19 +27,27 @@ export async function removeMember(userId: string) {
     return { error: "Only leaders can remove members" };
   }
 
-  const { error } = await supabase
-    .from("user_roles")
-    .delete()
-    .eq("user_id", userId);
-
-  if (error) return { error: error.message };
-
+  // 4. Delete auth user FIRST via admin client (cascades to profiles via
+  //    the FK on delete cascade). user_roles will also cascade-delete.
+  //    Doing this first avoids the orphaned-state where user_roles is gone
+  //    but the auth user still exists and could log in.
   try {
     const admin = createAdminClient();
-    await admin.auth.admin.deleteUser(userId);
-  } catch {
-    // user_roles already deleted — ignore auth delete errors
+    const { error: adminError } = await admin.auth.admin.deleteUser(userId);
+    if (adminError) {
+      // Surface the real error so the UI can show it
+      return { error: `Failed to delete user: ${adminError.message}` };
+    }
+  } catch (e) {
+    return {
+      error: `Failed to delete user: ${e instanceof Error ? e.message : String(e)}`,
+    };
   }
+
+  // 5. Cascade from auth.users -> profiles -> user_roles handles DB cleanup.
+  //    Belt-and-suspenders: explicitly delete user_roles in case the cascade
+  //    hasn't propagated yet (e.g. if the trigger fires async).
+  await supabase.from("user_roles").delete().eq("user_id", userId);
 
   revalidatePath("/team");
   return { success: true };

@@ -2,6 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { StageStatus } from "@/lib/types";
+
+const VALID_STATUSES: StageStatus[] = [
+  "not_started",
+  "in_progress",
+  "done",
+  "blocked",
+];
 
 async function logActivity(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -53,6 +61,9 @@ async function getStageContext(supabase: Awaited<ReturnType<typeof createClient>
 }
 
 export async function updateStageStatus(stageId: string, status: string) {
+  if (!VALID_STATUSES.includes(status as StageStatus)) {
+    return { error: `Invalid status: ${status}` };
+  }
   const supabase = await createClient();
 
   const updateData: Record<string, unknown> = {

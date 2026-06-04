@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireLeader } from "@/lib/auth-utils";
+import type { StageStatus } from "@/lib/types";
 
 function computeDeadline(month: number, year: number, day: number | null): string | null {
   if (!day) return null;
@@ -298,6 +299,11 @@ export async function assignTaskTypeToClientAction(
 }
 
 export async function bulkAdvanceStage(periodIds: string[], status: string): Promise<{ error?: string; success?: boolean }> {
+  const VALID: StageStatus[] = ["not_started", "in_progress", "done", "blocked"];
+  if (!VALID.includes(status as StageStatus)) {
+    return { error: `Invalid status: ${status}` };
+  }
+
   const supabase = await createClient();
   const now = new Date().toISOString();
 

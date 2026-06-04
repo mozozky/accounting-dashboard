@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   addStageTask,
   toggleStageTask,
@@ -25,25 +26,43 @@ export default function StageTaskList({ stageId, tasks: initialTasks }: Props) {
   const [adding, setAdding] = useState(false);
 
   const handleAdd = async () => {
-    if (!newLabel.trim()) return;
+    const label = newLabel.trim();
+    if (!label) return;
     setAdding(true);
-    const result = await addStageTask(stageId, newLabel.trim());
+    const result = await addStageTask(stageId, label);
     setAdding(false);
-    if (!result.error) {
+    if (result.error) {
+      toast.error(`Gagal menambah task: ${result.error}`);
+    } else {
       setNewLabel("");
     }
   };
 
   const handleToggle = async (taskId: string, currentDone: boolean) => {
+    // Optimistic update
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, is_done: !currentDone } : t))
     );
-    await toggleStageTask(taskId, !currentDone);
+    const result = await toggleStageTask(taskId, !currentDone);
+    if (result?.error) {
+      // Rollback
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, is_done: currentDone } : t))
+      );
+      toast.error(`Gagal mengubah task: ${result.error}`);
+    }
   };
 
   const handleDelete = async (taskId: string) => {
+    // Optimistic update
+    const snapshot = tasks;
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    await deleteStageTask(taskId);
+    const result = await deleteStageTask(taskId);
+    if (result?.error) {
+      // Rollback
+      setTasks(snapshot);
+      toast.error(`Gagal menghapus task: ${result.error}`);
+    }
   };
 
   return (
@@ -60,9 +79,7 @@ export default function StageTaskList({ stageId, tasks: initialTasks }: Props) {
             />
             <span
               className={`flex-1 text-sm ${
-                task.is_done
-                  ? "text-zinc-500 line-through"
-                  : "text-zinc-300"
+                task.is_done ? "text-zinc-500 line-through" : "text-zinc-300"
               }`}
             >
               {task.label}
@@ -82,7 +99,9 @@ export default function StageTaskList({ stageId, tasks: initialTasks }: Props) {
           type="text"
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
           placeholder="Add task..."
           className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
         />

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import StageCard from "./StageCard";
 import SavingIndicator from "./SavingIndicator";
 import {
@@ -44,64 +45,137 @@ export default function PeriodDetailClient({
 }: Props) {
   const [stages, setStages] = useState(initialStages);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [deadlineDraft, setDeadlineDraft] = useState(initialDeadline ?? "");
 
-  const trackSaving = useCallback(async (fn: () => Promise<unknown>) => {
-    setSaving(true);
-    await fn();
-    setSaving(false);
-  }, []);
+  /**
+   * Wraps a server action call with saving state + error handling.
+   * On failure: shows a toast, surfaces an inline error badge, and
+   * calls the optional `onRollback` to revert the optimistic update.
+   */
+  const trackSaving = useCallback(
+    async (
+      fn: () => Promise<{ error?: string } | unknown>,
+      onRollback?: () => void
+    ) => {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const result = await fn();
+        if (
+          result &&
+          typeof result === "object" &&
+          "error" in result &&
+          typeof (result as { error: string }).error === "string"
+        ) {
+          const msg = (result as { error: string }).error;
+          setSaveError(msg);
+          toast.error(`Gagal menyimpan: ${msg}`);
+          onRollback?.();
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        setSaveError(msg);
+        toast.error(`Gagal menyimpan: ${msg}`);
+        onRollback?.();
+      } finally {
+        setSaving(false);
+      }
+    },
+    []
+  );
 
   const handleChangeStatus = useCallback(
     (stageId: string, status: StageStatus) => {
-      setStages((prev) =>
-        prev.map((s) => (s.id === stageId ? { ...s, status } : s))
+      // Capture previous value for rollback
+      const prev = stages.find((s) => s.id === stageId)?.status;
+      setStages((cur) =>
+        cur.map((s) => (s.id === stageId ? { ...s, status } : s))
       );
-      trackSaving(() => updateStageStatus(stageId, status));
+      trackSaving(
+        () => updateStageStatus(stageId, status),
+        () =>
+          setStages((cur) =>
+            cur.map((s) =>
+              s.id === stageId && prev !== undefined ? { ...s, status: prev } : s
+            )
+          )
+      );
     },
-    [trackSaving]
+    [stages, trackSaving]
   );
 
   const handleChangeDeadline = useCallback(
     (stageId: string, deadline: string | null) => {
-      setStages((prev) =>
-        prev.map((s) =>
+      const prev = stages.find((s) => s.id === stageId)?.internal_deadline;
+      setStages((cur) =>
+        cur.map((s) =>
           s.id === stageId ? { ...s, internal_deadline: deadline } : s
         )
       );
-      trackSaving(() => updateStageDeadline(stageId, deadline));
+      trackSaving(
+        () => updateStageDeadline(stageId, deadline),
+        () =>
+          setStages((cur) =>
+            cur.map((s) =>
+              s.id === stageId ? { ...s, internal_deadline: prev ?? null } : s
+            )
+          )
+      );
     },
-    [trackSaving]
+    [stages, trackSaving]
   );
 
   const handleChangeAssignee = useCallback(
     (stageId: string, userId: string | null) => {
-      setStages((prev) =>
-        prev.map((s) =>
+      const prev = stages.find((s) => s.id === stageId)?.assignee_user_id;
+      setStages((cur) =>
+        cur.map((s) =>
           s.id === stageId ? { ...s, assignee_user_id: userId } : s
         )
       );
-      trackSaving(() => updateStageAssignee(stageId, userId));
+      trackSaving(
+        () => updateStageAssignee(stageId, userId),
+        () =>
+          setStages((cur) =>
+            cur.map((s) =>
+              s.id === stageId ? { ...s, assignee_user_id: prev ?? null } : s
+            )
+          )
+      );
     },
-    [trackSaving]
+    [stages, trackSaving]
   );
 
   const handleChangeNotes = useCallback(
     (stageId: string, notes: string | null) => {
-      setStages((prev) =>
-        prev.map((s) => (s.id === stageId ? { ...s, notes } : s))
+      const prev = stages.find((s) => s.id === stageId)?.notes;
+      setStages((cur) =>
+        cur.map((s) => (s.id === stageId ? { ...s, notes } : s))
       );
-      trackSaving(() => updateStageNotes(stageId, notes));
+      trackSaving(
+        () => updateStageNotes(stageId, notes),
+        () =>
+          setStages((cur) =>
+            cur.map((s) =>
+              s.id === stageId ? { ...s, notes: prev ?? null } : s
+            )
+          )
+      );
     },
-    [trackSaving]
+    [stages, trackSaving]
   );
 
   const handleDeadlineChange = (value: string) => {
+    const prev = deadlineDraft;
     setDeadlineDraft(value);
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
     deadlineTimerRef.current = setTimeout(() => {
-      trackSaving(() => updatePeriodDeadline(periodId, value || null));
+      trackSaving(
+        () => updatePeriodDeadline(periodId, value || null),
+        () => setDeadlineDraft(prev)
+      );
     }, 800);
   };
 
@@ -109,12 +183,8 @@ export default function PeriodDetailClient({
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">
-            {clientName}
-          </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">
-            {taskTypeName}
-          </p>
+          <h1 className="text-lg font-semibold text-white">{clientName}</h1>
+          <p className="mt-0.5 text-sm text-zinc-400">{taskTypeName}</p>
         </div>
         <div className="flex items-center gap-3">
           <div>
@@ -128,7 +198,7 @@ export default function PeriodDetailClient({
               className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none"
             />
           </div>
-          <SavingIndicator saving={saving} />
+          <SavingIndicator saving={saving} error={saveError} />
         </div>
       </div>
 
