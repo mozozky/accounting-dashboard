@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import ImportClientsButton from "@/components/clients/ImportClientsButton";
+import ClientRow from "@/components/clients/ClientRow";
 
 export default async function ClientsPage() {
   const supabase = await createClient();
@@ -43,26 +44,13 @@ export default async function ClientsPage() {
           </thead>
           <tbody>
             {(clients ?? []).map((c) => (
-              <tr
+              <ClientRow
                 key={c.id}
-                className="border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50"
-              >
-                <td className="px-4 py-3 font-medium text-white">{c.name}</td>
-                <td className="px-4 py-3 text-zinc-400">
-                  {c.profiles?.full_name ?? "-"}
-                </td>
-                <td className="px-4 py-3 text-zinc-400">
-                  {c.contact_email ?? "-"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/clients/${c.id}`}
-                    className="rounded-md bg-zinc-800 px-3 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
+                id={c.id}
+                name={c.name}
+                picName={c.profiles?.full_name ?? null}
+                contactEmail={c.contact_email ?? null}
+              />
             ))}
             {(!clients || clients.length === 0) && (
               <tr>

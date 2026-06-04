@@ -18,7 +18,7 @@ export default async function MyTasksPage() {
       id, stage_name, status, internal_deadline, order_index,
       period:period_id (
         id, period_month, period_year,
-        client:client_id (id, name),
+        client:client_id (id, name, is_active),
         task_type:task_type_id (name)
       )
     `)
@@ -28,19 +28,25 @@ export default async function MyTasksPage() {
     .eq("period.period_year", year)
     .order("internal_deadline", { ascending: true, nullsFirst: false });
 
-  const tasks = (stages ?? []).map((s) => {
-    const period = s.period as unknown as Record<string, unknown>;
-    return {
-      id: s.id,
-      stageName: s.stage_name,
-      status: s.status as StageStatus,
-      internalDeadline: s.internal_deadline as string | null,
-      periodId: period?.id as string,
-      clientId: (period?.client as Record<string, string>)?.id ?? "",
-      clientName: (period?.client as Record<string, string>)?.name ?? "",
-      taskTypeName: (period?.task_type as Record<string, string>)?.name ?? "",
-    };
-  });
+  const tasks = (stages ?? [])
+    .map((s) => {
+      const period = s.period as unknown as Record<string, unknown>;
+      const client = period?.client as Record<string, unknown> | undefined;
+      return {
+        id: s.id,
+        stageName: s.stage_name,
+        status: s.status as StageStatus,
+        internalDeadline: s.internal_deadline as string | null,
+        periodId: period?.id as string,
+        clientId: (client?.id as string) ?? "",
+        clientName: (client?.name as string) ?? "",
+        clientActive: client?.is_active as boolean | undefined,
+        taskTypeName: (period?.task_type as Record<string, string>)?.name ?? "",
+      };
+    })
+    // Exclude tasks whose client was archived/deleted, and any rows whose
+    // period didn't match this month's filter (embedded filter leaves them null).
+    .filter((t) => t.periodId && t.clientActive !== false);
 
   return (
     <div className="p-8">
