@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireLeader } from "@/lib/auth-utils";
 
 function computeDeadline(month: number, year: number, day: number | null): string | null {
   if (!day) return null;
@@ -65,6 +66,9 @@ function parseCSV(content: string): string[][] {
 }
 
 export async function importClientsCSV(csvContent: string) {
+  const denied = await requireLeader();
+  if (denied) return { error: denied.error };
+
   const sanitized = csvContent
     .replace(/^\uFEFF/, "")
     .replace(/\r\n?/g, "\n");

@@ -32,7 +32,13 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase keys:
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SIGNUP_CODE=your-secret-invite-code
 ```
+
+> `SIGNUP_CODE` gates the `/signup` page: a new account can only be created
+> by entering this code. **If it is empty, all new signups are disabled
+> (fail-closed).** Set it in your hosting environment (e.g. Vercel project
+> env vars) and share it manually with new team members.
 
 ### Database Setup
 
@@ -46,6 +52,11 @@ Run these in Supabase SQL Editor (in order):
 6. `supabase/migrations/006_fix_triggers.sql`
 7. `supabase/migrations/007_drop_triggers.sql`
 8. `supabase/migrations/008_add_password_flag.sql`
+9. `supabase/migrations/009_add_default_deadline.sql`
+10. `supabase/migrations/010_add_hard_deadline_day.sql`
+11. `supabase/migrations/011_stage_task_templates.sql`
+12. `supabase/migrations/012_activity_log.sql`
+13. `supabase/migrations/013_fix_role_assignment.sql`
 
 ### Supabase Settings
 

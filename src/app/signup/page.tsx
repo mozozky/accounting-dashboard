@@ -10,6 +10,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +20,10 @@ export default function SignupPage() {
 
     if (!email || !password) {
       setError("Email and password are required");
+      return;
+    }
+    if (!code) {
+      setError("Invite code is required");
       return;
     }
     if (password.length < 6) {
@@ -35,6 +40,7 @@ export default function SignupPage() {
     formData.append("email", email);
     formData.append("password", password);
     formData.append("confirm", confirm);
+    formData.append("code", code);
     const result = await signUp({}, formData);
     setLoading(false);
 
@@ -115,6 +121,26 @@ export default function SignupPage() {
               onChange={(e) => setConfirm(e.target.value)}
               className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               placeholder="Re-enter password"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="code"
+              className="mb-1 block text-sm font-medium text-zinc-300"
+            >
+              Invite Code
+            </label>
+            <input
+              id="code"
+              name="code"
+              type="text"
+              required
+              autoComplete="off"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              placeholder="Code from your administrator"
             />
           </div>
 
