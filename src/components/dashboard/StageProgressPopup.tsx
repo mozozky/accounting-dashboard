@@ -169,6 +169,13 @@ export default function StageProgressPopup({
                         {doneTasks}/{totalTasks}
                       </span>
                     )}
+                    {/* Fitur 2: show who completed this stage and when */}
+                    {stage.status === "done" && stage.completed_by_name && (
+                      <span className="mt-0.5 block text-xs font-normal text-emerald-500/80">
+                        Selesai oleh {stage.completed_by_name}
+                        {stage.completed_at && ` · ${formatDate(stage.completed_at)}`}
+                      </span>
+                    )}
                   </button>
 
                   {stage.internal_deadline && (
