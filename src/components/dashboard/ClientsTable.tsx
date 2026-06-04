@@ -347,6 +347,7 @@ export default function ClientsTable({
           clientName={popupRow.clientName}
           taskTypeName={popupRow.taskTypeName}
           stages={popupRow.stageDetails}
+          hardDeadline={popupRow.hardDeadline}
         />
       )}
     </div>

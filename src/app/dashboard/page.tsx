@@ -106,7 +106,7 @@ export default async function DashboardPage({
   const { data: selectedPeriods } = await supabase
     .from("client_periods")
     .select(
-      "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, completed_at, completed_by_user_id)"
+      "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, internal_deadline, completed_at, completed_by_user_id)"
     )
     .eq("period_month", selectedMonth)
     .eq("period_year", selectedYear);
@@ -116,6 +116,7 @@ export default async function DashboardPage({
     status: string;
     stage_name: string;
     order_index: number;
+    internal_deadline: string | null;
     completed_at: string | null;
     completed_by_user_id: string | null;
   }
@@ -215,6 +216,7 @@ export default async function DashboardPage({
         stageId: s.id,
         stage_name: s.stage_name,
         status: s.status as StageStatus,
+        internal_deadline: s.internal_deadline,
         completed_at: s.completed_at,
         completed_by_name: s.completed_by_user_id
           ? completedByNameMap.get(s.completed_by_user_id) ?? null

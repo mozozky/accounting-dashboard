@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { updateStageStatus, toggleStageTask } from "@/lib/period-actions";
 import type { StageStatus } from "@/lib/types";
@@ -9,6 +10,7 @@ export interface StagePopupItem {
   stageId: string;
   stage_name: string;
   status: StageStatus;
+  internal_deadline: string | null;
   completed_at: string | null;
   completed_by_name: string | null;
   tasks: { id: string; label: string; is_done: boolean }[];
@@ -20,6 +22,7 @@ interface Props {
   clientName: string;
   taskTypeName: string;
   stages: StagePopupItem[];
+  hardDeadline: string | null;
 }
 
 const STAGE_COLORS: Record<StageStatus, string> = {
@@ -43,13 +46,23 @@ const STATUS_LABEL: Record<StageStatus, string> = {
   blocked: "Blocked",
 };
 
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "-";
+  return new Date(dateStr).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export default function StageProgressPopup({
   open,
   onClose,
   clientName,
   taskTypeName,
   stages: initialStages,
+  hardDeadline,
 }: Props) {
+  const router = useRouter();
   const [stages, setStages] = useState(initialStages);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -82,6 +95,7 @@ export default function StageProgressPopup({
 
     const result = await updateStageStatus(stageId, next);
     if (result.error) toast.error(result.error);
+    router.refresh();
   };
 
   const handleToggleTask = async (taskId: string, isDone: boolean) => {
@@ -95,6 +109,7 @@ export default function StageProgressPopup({
     );
 
     await toggleStageTask(taskId, isDone);
+    router.refresh();
   };
 
   return (
@@ -104,13 +119,20 @@ export default function StageProgressPopup({
     >
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative z-10 w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl max-h-[80vh] flex flex-col"
+        className="relative z-10 w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4 shrink-0">
           <div>
             <h3 className="text-sm font-semibold text-white">{clientName}</h3>
-            <p className="text-xs text-zinc-500">{taskTypeName}</p>
+            <p className="text-xs text-zinc-500">
+              {taskTypeName}
+              {hardDeadline && (
+                <span className="ml-2 text-zinc-500">
+                  · Hard: {formatDate(hardDeadline)}
+                </span>
+              )}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -122,7 +144,7 @@ export default function StageProgressPopup({
           </button>
         </div>
 
-        <div className="overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto px-5 py-2">
           {stages.map((stage) => {
             const isExpanded = expanded === stage.stageId;
             const doneTasks = stage.tasks.filter((t) => t.is_done).length;
@@ -138,9 +160,7 @@ export default function StageProgressPopup({
                   />
 
                   <button
-                    onClick={() =>
-                      setExpanded(isExpanded ? null : stage.stageId)
-                    }
+                    onClick={() => setExpanded(isExpanded ? null : stage.stageId)}
                     className="flex-1 text-left text-sm text-white hover:text-zinc-300"
                   >
                     {stage.stage_name}
@@ -151,7 +171,13 @@ export default function StageProgressPopup({
                     )}
                   </button>
 
-                  <span className="text-xs text-zinc-500">
+                  {stage.internal_deadline && (
+                    <span className="text-xs text-zinc-500 tabular-nums">
+                      {formatDate(stage.internal_deadline)}
+                    </span>
+                  )}
+
+                  <span className="text-xs text-zinc-600 w-20 text-right">
                     {STATUS_LABEL[stage.status]}
                   </span>
                 </div>
@@ -169,11 +195,7 @@ export default function StageProgressPopup({
                           onChange={(e) => handleToggleTask(task.id, e.target.checked)}
                           className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white shrink-0"
                         />
-                        <span
-                          className={`text-xs ${
-                            task.is_done ? "text-zinc-500 line-through" : "text-zinc-300"
-                          }`}
-                        >
+                        <span className={`text-xs ${task.is_done ? "text-zinc-500 line-through" : "text-zinc-300"}`}>
                           {task.label}
                         </span>
                       </label>
@@ -182,9 +204,7 @@ export default function StageProgressPopup({
                 )}
 
                 {isExpanded && stage.tasks.length === 0 && (
-                  <p className="mb-2 ml-6 text-xs text-zinc-600">
-                    No tasks in checklist
-                  </p>
+                  <p className="mb-2 ml-6 text-xs text-zinc-600">No tasks in checklist</p>
                 )}
               </div>
             );
