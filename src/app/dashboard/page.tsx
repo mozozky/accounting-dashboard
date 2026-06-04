@@ -250,6 +250,10 @@ export default async function DashboardPage({
   const priorRows: PriorRow[] = [];
 
   for (const pp of priorPeriods ?? []) {
+    // Skip archived/deleted clients — clientMap only holds active clients.
+    const client = clientMap.get(pp.client_id);
+    if (!client) continue;
+
     const stages = pp.period_stages ?? [];
     const status = determineStatus(stages, pp.hard_deadline);
 
@@ -262,7 +266,6 @@ export default async function DashboardPage({
 
     priorUnfinishedCount++;
 
-    const client = clientMap.get(pp.client_id);
     priorRows.push({
       clientId: pp.client_id,
       clientName: client?.name ?? "",
