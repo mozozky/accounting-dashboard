@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,6 +16,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
+        <NextTopLoader
+          color="#10b981"
+          height={2}
+          shadow="0 0 8px #10b981"
+          showSpinner={false}
+        />
         {children}
         <Toaster
           theme="dark"
