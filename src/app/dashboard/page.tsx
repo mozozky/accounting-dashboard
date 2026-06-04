@@ -112,6 +112,7 @@ export default async function DashboardPage({
     .eq("period_year", selectedYear);
 
   interface StageData {
+    id: string;
     status: string;
     stage_name: string;
     order_index: number;
@@ -137,6 +138,24 @@ export default async function DashboardPage({
       hard_deadline: p.hard_deadline,
       stages,
     });
+  }
+
+  const allStageIds = Array.from(periodByClientTask.values())
+    .flatMap((p) => p.stages.map((s) => s.id));
+
+  const stageTasksMap = new Map<string, { id: string; label: string; is_done: boolean }[]>();
+  if (allStageIds.length > 0) {
+    const { data: allTasks } = await supabase
+      .from("stage_tasks")
+      .select("id, stage_id, label, is_done")
+      .in("stage_id", allStageIds)
+      .order("order_index");
+
+    for (const task of allTasks ?? []) {
+      const list = stageTasksMap.get(task.stage_id) ?? [];
+      list.push({ id: task.id, label: task.label, is_done: task.is_done });
+      stageTasksMap.set(task.stage_id, list);
+    }
   }
 
   let completedByNameMap = new Map<string, string>();
@@ -193,12 +212,14 @@ export default async function DashboardPage({
         .sort((a, b) => a.order_index - b.order_index);
 
       const stageDetails = sortedStages.map((s) => ({
+        stageId: s.id,
         stage_name: s.stage_name,
         status: s.status as StageStatus,
         completed_at: s.completed_at,
         completed_by_name: s.completed_by_user_id
           ? completedByNameMap.get(s.completed_by_user_id) ?? null
           : null,
+        tasks: stageTasksMap.get(s.id) ?? [],
       }));
 
       const timelineStages = sortedStages.map((s) => ({
