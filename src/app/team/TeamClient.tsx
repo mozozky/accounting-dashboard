@@ -43,10 +43,11 @@ export default function TeamClient({
     <div>
       <div className="mb-6 rounded-md border border-zinc-700 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-400">
         <p>
-          New team members? Share the signup link:{" "}
+          Mau tambah anggota? Share link signup{" "}
           <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-white">
             /signup
-          </span>
+          </span>{" "}
+          dan kasih <span className="text-zinc-300 font-medium">invite code</span>-nya secara langsung.
         </p>
       </div>
 
