@@ -8,12 +8,17 @@ export async function signUp(
   formData: FormData
 ) {
   const email = formData.get("email") as string;
+  const fullName = ((formData.get("full_name") as string) ?? "").trim();
   const password = formData.get("password") as string;
   const confirm = formData.get("confirm") as string;
   const code = ((formData.get("code") as string) ?? "").trim();
 
   if (!email || !password) {
     return { error: "Email and password are required" };
+  }
+
+  if (!fullName) {
+    return { error: "Full name is required" };
   }
 
   // --- Signup gate (Opsi B): require a valid invite code ---
@@ -53,11 +58,11 @@ export async function signUp(
     return { error: "Sign up failed" };
   }
 
-  // Create profile
+  // Create profile — use the name they provided, fallback to email
   await supabase.from("profiles").insert({
     id: user.id,
     email: user.email,
-    full_name: user.email,
+    full_name: fullName || user.email,
     password_set: true,
   });
 
