@@ -57,6 +57,8 @@ Run these in Supabase SQL Editor (in order):
 11. `supabase/migrations/011_stage_task_templates.sql`
 12. `supabase/migrations/012_activity_log.sql`
 13. `supabase/migrations/013_fix_role_assignment.sql`
+14. `supabase/migrations/014_fix_user_delete_fks.sql`
+15. `supabase/migrations/015_split_bpjs_tax.sql`
 
 ### Supabase Settings
 
