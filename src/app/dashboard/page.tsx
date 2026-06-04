@@ -7,35 +7,7 @@ import ExportButton from "@/components/dashboard/ExportButton";
 import type { ClientRow } from "@/components/dashboard/ClientsTable";
 import type { PriorRow } from "@/components/dashboard/PriorMonthsTable";
 import type { StageStatus } from "@/lib/types";
-
-function determineStatus(
-  stages: { status: StageStatus }[],
-  hardDeadline: string | null
-): StageStatus | "overdue" | "no_period" {
-  if (stages.length === 0) return "no_period";
-
-  const hasBlocked = stages.some((s) => s.status === "blocked");
-  if (hasBlocked) return "blocked";
-
-  const allDone = stages.every((s) => s.status === "done");
-  if (!allDone && hardDeadline) {
-    const deadline = new Date(hardDeadline);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    deadline.setHours(0, 0, 0, 0);
-    if (deadline < today) return "overdue";
-  }
-
-  if (allDone) return "done";
-
-  const hasInProgress = stages.some((s) => s.status === "in_progress");
-  if (hasInProgress) return "in_progress";
-
-  const allNotStarted = stages.every((s) => s.status === "not_started");
-  if (allNotStarted) return "not_started";
-
-  return "in_progress";
-}
+import { determineStatus, todayWIB, daysFromNowWIB } from "@/lib/utils/date";
 
 export default async function DashboardPage({
   searchParams,
@@ -46,8 +18,7 @@ export default async function DashboardPage({
   const now = new Date();
 
   const selectedMonth =
-    parseInt(searchParams?.month ?? "") ||
-    now.getMonth() + 1;
+    parseInt(searchParams?.month ?? "") || now.getMonth() + 1;
   const selectedYear =
     parseInt(searchParams?.year ?? "") || now.getFullYear();
 
@@ -89,9 +60,7 @@ export default async function DashboardPage({
     pairs.push({ clientId: row.client_id, taskTypeId: row.task_type_id });
   }
 
-  const taskTypeIds = Array.from(
-    new Set(pairs.map((p) => p.taskTypeId))
-  );
+  const taskTypeIds = Array.from(new Set(pairs.map((p) => p.taskTypeId)));
 
   let taskTypeMap = new Map<string, string>();
   if (taskTypeIds.length > 0) {
@@ -141,10 +110,14 @@ export default async function DashboardPage({
     });
   }
 
-  const allStageIds = Array.from(periodByClientTask.values())
-    .flatMap((p) => p.stages.map((s) => s.id));
+  const allStageIds = Array.from(periodByClientTask.values()).flatMap((p) =>
+    p.stages.map((s) => s.id)
+  );
 
-  const stageTasksMap = new Map<string, { id: string; label: string; is_done: boolean }[]>();
+  const stageTasksMap = new Map<
+    string,
+    { id: string; label: string; is_done: boolean }[]
+  >();
   if (allStageIds.length > 0) {
     const { data: allTasks } = await supabase
       .from("stage_tasks")
@@ -170,11 +143,9 @@ export default async function DashboardPage({
     );
   }
 
-  // --- Build selected month rows ---
-  const todayStr = new Date().toISOString().split("T")[0];
-  const weekFromNow = new Date();
-  weekFromNow.setDate(weekFromNow.getDate() + 7);
-  const weekStr = weekFromNow.toISOString().split("T")[0];
+  // --- Date strings pinned to WIB (Asia/Jakarta) ---
+  const todayStr = todayWIB();
+  const weekStr = daysFromNowWIB(7);
 
   let totalActive = 0;
   let overdueCount = 0;
@@ -192,7 +163,7 @@ export default async function DashboardPage({
       const stages = period?.stages ?? [];
       const hardDeadline = period?.hard_deadline ?? null;
       const status = period
-        ? determineStatus(stages as { status: StageStatus }[], hardDeadline)
+        ? determineStatus(stages, hardDeadline)
         : "no_period";
       const doneCount = stages.filter((s) => s.status === "done").length;
 
@@ -268,7 +239,9 @@ export default async function DashboardPage({
   // --- Fetch PRIOR unfinished periods (months before selectedMonth) ---
   const { data: priorPeriods } = await supabase
     .from("client_periods")
-    .select("id, client_id, task_type_id, hard_deadline, period_month, period_year, period_stages(status)")
+    .select(
+      "id, client_id, task_type_id, hard_deadline, period_month, period_year, period_stages(status)"
+    )
     .or(
       `period_year.lt.${selectedYear},and(period_year.eq.${selectedYear},period_month.lt.${selectedMonth})`
     );
@@ -278,12 +251,14 @@ export default async function DashboardPage({
 
   for (const pp of priorPeriods ?? []) {
     const stages = pp.period_stages ?? [];
-    const status = determineStatus(
-      stages as { status: StageStatus }[],
-      pp.hard_deadline
-    );
+    const status = determineStatus(stages, pp.hard_deadline);
 
-    if (status === "done" || status === "not_started" || status === "no_period") continue;
+    if (
+      status === "done" ||
+      status === "not_started" ||
+      status === "no_period"
+    )
+      continue;
 
     priorUnfinishedCount++;
 
@@ -296,7 +271,8 @@ export default async function DashboardPage({
       periodMonth: pp.period_month,
       periodYear: pp.period_year,
       stageProgress: {
-        done: stages.filter((s: { status: string }) => s.status === "done").length,
+        done: stages.filter((s: { status: string }) => s.status === "done")
+          .length,
         total: stages.length,
       },
       hardDeadline: pp.hard_deadline,

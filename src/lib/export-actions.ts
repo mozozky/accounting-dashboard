@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { determineStatus } from "@/lib/utils/date";
 
 const CSV_HEADERS = [
   "Client",
@@ -11,6 +12,19 @@ const CSV_HEADERS = [
   "Progress",
   "Deadline",
 ];
+
+/** Maps OverallStatus to a human-readable CSV label. */
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    blocked: "Blocked",
+    overdue: "Overdue",
+    done: "Done",
+    in_progress: "In Progress",
+    not_started: "Not Started",
+    no_period: "No Period",
+  };
+  return map[status] ?? status;
+}
 
 export async function exportDashboardCSV(month: number, year: number) {
   const supabase = await createClient();
@@ -25,10 +39,10 @@ export async function exportDashboardCSV(month: number, year: number) {
     return { csv: "", message: "No active clients found" };
   }
 
-  const clientMap = new Map((clients ?? []).map((c) => [c.id, c]));
+  const clientMap = new Map(clients.map((c) => [c.id, c]));
 
   const picUserIds = Array.from(
-    new Set((clients ?? []).map((c) => c.pic_user_id).filter(Boolean))
+    new Set(clients.map((c) => c.pic_user_id).filter(Boolean))
   ) as string[];
 
   let profileMap = new Map<string, string>();
@@ -79,6 +93,12 @@ export async function exportDashboardCSV(month: number, year: number) {
     .eq("period_month", month)
     .eq("period_year", year);
 
+  interface StageRow {
+    status: string;
+    stage_name: string;
+    order_index: number;
+  }
+
   const periodByClientTask = new Map<
     string,
     {
@@ -91,59 +111,27 @@ export async function exportDashboardCSV(month: number, year: number) {
   >();
 
   for (const p of periods ?? []) {
-    const stages = (p.period_stages ?? []).sort(
-      (a: { order_index: number }, b: { order_index: number }) =>
-        a.order_index - b.order_index
+    const stages = ((p.period_stages ?? []) as StageRow[]).sort(
+      (a, b) => a.order_index - b.order_index
     );
-    const done = stages.filter(
-      (s: { status: string }) => s.status === "done"
-    ).length;
+    const done = stages.filter((s) => s.status === "done").length;
 
-    let status = "No Period";
-    let stage = "-";
-    if (stages.length > 0) {
-      const active =
-        stages.find(
-          (s: { status: string }) => s.status === "in_progress"
-        ) ||
-        stages.find(
-          (s: { status: string }) => s.status === "blocked"
-        ) ||
-        stages.find(
-          (s: { status: string }) => s.status === "not_started"
-        );
+    // Use shared determineStatus (WIB-aware, single source of truth)
+    const overallStatus = determineStatus(stages, p.hard_deadline);
 
-      stage = active?.stage_name ?? stages[stages.length - 1].stage_name;
-
-      const hasBlocked = stages.some(
-        (s: { status: string }) => s.status === "blocked"
-      );
-      if (hasBlocked) status = "Blocked";
-      else if (stages.every((s: { status: string }) => s.status === "done"))
-        status = "Done";
-      else if (
-        stages.some((s: { status: string }) => s.status === "in_progress")
-      )
-        status = "In Progress";
-      else if (
-        stages.every((s: { status: string }) => s.status === "not_started")
-      )
-        status = "Not Started";
-      else if (p.hard_deadline) {
-        const deadline = new Date(p.hard_deadline);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        deadline.setHours(0, 0, 0, 0);
-        if (deadline < today) status = "Overdue";
-      }
-    }
+    // Active stage: first in_progress, then first blocked, then first not_started
+    const activeStage =
+      stages.find((s) => s.status === "in_progress") ??
+      stages.find((s) => s.status === "blocked") ??
+      stages.find((s) => s.status === "not_started") ??
+      stages[stages.length - 1];
 
     periodByClientTask.set(`${p.client_id}-${p.task_type_id}`, {
       hard_deadline: p.hard_deadline,
       done,
       total: stages.length,
-      status,
-      stage,
+      status: statusLabel(overallStatus),
+      stage: activeStage?.stage_name ?? "-",
     });
   }
 
@@ -161,15 +149,7 @@ export async function exportDashboardCSV(month: number, year: number) {
     const picName = profileMap.get(client.pic_user_id ?? "") ?? "-";
     const taskTypeName = taskTypeMap.get(taskTypeId) ?? "";
 
-    rows.push([
-      client.name,
-      taskTypeName,
-      stage,
-      status,
-      picName,
-      progress,
-      deadline,
-    ]);
+    rows.push([client.name, taskTypeName, stage, status, picName, progress, deadline]);
   }
 
   if (rows.length === 0) {
@@ -181,7 +161,6 @@ export async function exportDashboardCSV(month: number, year: number) {
     return a[1].localeCompare(b[1]);
   });
 
-  // escape CSV value
   const escapeCSV = (val: string) => {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
       return `"${val.replace(/"/g, '""')}"`;
@@ -190,7 +169,7 @@ export async function exportDashboardCSV(month: number, year: number) {
   };
 
   const csv = [
-    CSV_HEADERS.join(","),
+    "\uFEFF" + CSV_HEADERS.join(","), // BOM for Excel compatibility
     ...rows.map((r) => r.map(escapeCSV).join(",")),
   ].join("\n");
 
