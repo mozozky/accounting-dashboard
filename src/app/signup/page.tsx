@@ -8,6 +8,7 @@ import { signUp } from "./actions";
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
@@ -20,6 +21,10 @@ export default function SignupPage() {
 
     if (!email || !password) {
       setError("Email and password are required");
+      return;
+    }
+    if (!fullName.trim()) {
+      setError("Full name is required");
       return;
     }
     if (!code) {
@@ -38,6 +43,7 @@ export default function SignupPage() {
     setLoading(true);
     const formData = new FormData();
     formData.append("email", email);
+    formData.append("full_name", fullName.trim());
     formData.append("password", password);
     formData.append("confirm", confirm);
     formData.append("code", code);
@@ -62,6 +68,26 @@ export default function SignupPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="full_name"
+              className="mb-1 block text-sm font-medium text-zinc-300"
+            >
+              Full Name
+            </label>
+            <input
+              id="full_name"
+              name="full_name"
+              type="text"
+              required
+              autoComplete="name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              placeholder="Nama lengkap"
+            />
+          </div>
+
           <div>
             <label
               htmlFor="email"

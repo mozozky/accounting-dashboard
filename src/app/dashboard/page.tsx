@@ -12,45 +12,53 @@ import { determineStatus, todayWIB, daysFromNowWIB, currentMonthYearWIB, formatM
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { month?: string; year?: string };
+  searchParams: Promise<{ month?: string; year?: string }>;
 }) {
+  // Next.js 15: searchParams is a Promise — await it.
+  const params = await searchParams;
   const supabase = await createClient();
   const now = new Date();
 
-  const selectedMonth =
-    parseInt(searchParams?.month ?? "") || now.getMonth() + 1;
-  const selectedYear =
-    parseInt(searchParams?.year ?? "") || now.getFullYear();
+  const selectedMonth = parseInt(params?.month ?? "") || now.getMonth() + 1;
+  const selectedYear = parseInt(params?.year ?? "") || now.getFullYear();
 
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name, pic_user_id")
-    .eq("is_active", true)
-    .order("name");
+  // --- Batch 1: independent queries fired in parallel ---
+  const [
+    { data: clients },
+    { data: templateRows },
+    { data: selectedPeriods },
+    { data: priorPeriods },
+  ] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name, pic_user_id")
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("stage_templates")
+      .select("client_id, task_type_id")
+      .eq("is_active", true)
+      .not("client_id", "is", null),
+    supabase
+      .from("client_periods")
+      .select(
+        "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, internal_deadline, completed_at, completed_by_user_id)"
+      )
+      .eq("period_month", selectedMonth)
+      .eq("period_year", selectedYear),
+    supabase
+      .from("client_periods")
+      .select(
+        "id, client_id, task_type_id, hard_deadline, period_month, period_year, period_stages(status)"
+      )
+      .or(
+        `period_year.lt.${selectedYear},and(period_year.eq.${selectedYear},period_month.lt.${selectedMonth})`
+      ),
+  ]);
 
   const clientMap = new Map((clients ?? []).map((c) => [c.id, c]));
 
-  const picUserIds = Array.from(
-    new Set((clients ?? []).map((c) => c.pic_user_id).filter(Boolean))
-  ) as string[];
-
-  let profileMap = new Map<string, string>();
-  if (picUserIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", picUserIds);
-    profileMap = new Map(
-      (profiles ?? []).map((p) => [p.id, p.full_name ?? ""])
-    );
-  }
-
-  const { data: templateRows } = await supabase
-    .from("stage_templates")
-    .select("client_id, task_type_id")
-    .eq("is_active", true)
-    .not("client_id", "is", null);
-
+  // --- Derive unique client+task pairs and task type ids ---
   const seen = new Set<string>();
   const pairs: { clientId: string; taskTypeId: string }[] = [];
   for (const row of templateRows ?? []) {
@@ -61,25 +69,11 @@ export default async function DashboardPage({
   }
 
   const taskTypeIds = Array.from(new Set(pairs.map((p) => p.taskTypeId)));
+  const picUserIds = Array.from(
+    new Set((clients ?? []).map((c) => c.pic_user_id).filter(Boolean))
+  ) as string[];
 
-  let taskTypeMap = new Map<string, string>();
-  if (taskTypeIds.length > 0) {
-    const { data: taskTypes } = await supabase
-      .from("task_types")
-      .select("id, name")
-      .in("id", taskTypeIds);
-    taskTypeMap = new Map((taskTypes ?? []).map((t) => [t.id, t.name]));
-  }
-
-  // --- Fetch periods for SELECTED month ---
-  const { data: selectedPeriods } = await supabase
-    .from("client_periods")
-    .select(
-      "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, internal_deadline, completed_at, completed_by_user_id)"
-    )
-    .eq("period_month", selectedMonth)
-    .eq("period_year", selectedYear);
-
+  // --- Process periods to find stage ids + completed-by user ids ---
   interface StageData {
     id: string;
     status: string;
@@ -94,7 +88,6 @@ export default async function DashboardPage({
     string,
     { id: string; hard_deadline: string | null; stages: StageData[] }
   >();
-
   const allCompletedByIds = new Set<string>();
 
   for (const p of selectedPeriods ?? []) {
@@ -103,45 +96,61 @@ export default async function DashboardPage({
     for (const s of stages) {
       if (s.completed_by_user_id) allCompletedByIds.add(s.completed_by_user_id);
     }
-    periodByClientTask.set(key, {
-      id: p.id,
-      hard_deadline: p.hard_deadline,
-      stages,
-    });
+    periodByClientTask.set(key, { id: p.id, hard_deadline: p.hard_deadline, stages });
   }
 
   const allStageIds = Array.from(periodByClientTask.values()).flatMap((p) =>
     p.stages.map((s) => s.id)
   );
 
+  // --- Batch 2: dependent queries (need ids from batch 1) fired in parallel ---
+  const [
+    profilesResult,
+    taskTypesResult,
+    allTasksResult,
+    completedByResult,
+  ] = await Promise.all([
+    picUserIds.length > 0
+      ? supabase.from("profiles").select("id, full_name").in("id", picUserIds)
+      : Promise.resolve({ data: [] }),
+    taskTypeIds.length > 0
+      ? supabase.from("task_types").select("id, name").in("id", taskTypeIds)
+      : Promise.resolve({ data: [] }),
+    allStageIds.length > 0
+      ? supabase
+          .from("stage_tasks")
+          .select("id, stage_id, label, is_done")
+          .in("stage_id", allStageIds)
+          .order("order_index")
+      : Promise.resolve({ data: [] }),
+    allCompletedByIds.size > 0
+      ? supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", Array.from(allCompletedByIds))
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const profileMap = new Map(
+    (profilesResult.data ?? []).map((p) => [p.id, p.full_name ?? ""])
+  );
+  const taskTypeMap = new Map(
+    (taskTypesResult.data ?? []).map((t) => [t.id, t.name])
+  );
+
   const stageTasksMap = new Map<
     string,
     { id: string; label: string; is_done: boolean }[]
   >();
-  if (allStageIds.length > 0) {
-    const { data: allTasks } = await supabase
-      .from("stage_tasks")
-      .select("id, stage_id, label, is_done")
-      .in("stage_id", allStageIds)
-      .order("order_index");
-
-    for (const task of allTasks ?? []) {
-      const list = stageTasksMap.get(task.stage_id) ?? [];
-      list.push({ id: task.id, label: task.label, is_done: task.is_done });
-      stageTasksMap.set(task.stage_id, list);
-    }
+  for (const task of allTasksResult.data ?? []) {
+    const list = stageTasksMap.get(task.stage_id) ?? [];
+    list.push({ id: task.id, label: task.label, is_done: task.is_done });
+    stageTasksMap.set(task.stage_id, list);
   }
 
-  let completedByNameMap = new Map<string, string>();
-  if (allCompletedByIds.size > 0) {
-    const { data: completedByProfiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", Array.from(allCompletedByIds));
-    completedByNameMap = new Map(
-      (completedByProfiles ?? []).map((p) => [p.id, p.full_name ?? ""])
-    );
-  }
+  const completedByNameMap = new Map(
+    (completedByResult.data ?? []).map((p) => [p.id, p.full_name ?? ""])
+  );
 
   // --- Date strings pinned to WIB (Asia/Jakarta) ---
   const todayStr = todayWIB();
@@ -236,20 +245,15 @@ export default async function DashboardPage({
     return a.taskTypeName.localeCompare(b.taskTypeName);
   });
 
-  // --- Fetch PRIOR unfinished periods (months before selectedMonth) ---
-  const { data: priorPeriods } = await supabase
-    .from("client_periods")
-    .select(
-      "id, client_id, task_type_id, hard_deadline, period_month, period_year, period_stages(status)"
-    )
-    .or(
-      `period_year.lt.${selectedYear},and(period_year.eq.${selectedYear},period_month.lt.${selectedMonth})`
-    );
-
+  // --- Prior unfinished ---
   let priorUnfinishedCount = 0;
   const priorRows: PriorRow[] = [];
 
   for (const pp of priorPeriods ?? []) {
+    // Skip archived/deleted clients — clientMap only holds active clients.
+    const client = clientMap.get(pp.client_id);
+    if (!client) continue;
+
     const stages = pp.period_stages ?? [];
     const status = determineStatus(stages, pp.hard_deadline);
 
@@ -262,7 +266,6 @@ export default async function DashboardPage({
 
     priorUnfinishedCount++;
 
-    const client = clientMap.get(pp.client_id);
     priorRows.push({
       clientId: pp.client_id,
       clientName: client?.name ?? "",

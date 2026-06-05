@@ -65,6 +65,8 @@ export default function StageProgressPopup({
   const router = useRouter();
   const [stages, setStages] = useState(initialStages);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [cyclingId, setCyclingId] = useState<string | null>(null);
+  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     setStages(initialStages);
@@ -81,24 +83,42 @@ export default function StageProgressPopup({
   if (!open) return null;
 
   const handleCycleStatus = async (stageId: string) => {
+    if (cyclingId) return; // prevent double-click
     const current = stages.find((s) => s.stageId === stageId);
     if (!current) return;
     const next = NEXT_STATUS[current.status];
 
+    setCyclingId(stageId);
+    // Optimistic update
     setStages((prev) =>
       prev.map((s) =>
         s.stageId === stageId
-          ? { ...s, status: next, completed_at: next === "done" ? new Date().toISOString() : s.completed_at }
+          ? {
+              ...s,
+              status: next,
+              completed_at:
+                next === "done" ? new Date().toISOString() : s.completed_at,
+            }
           : s
       )
     );
 
     const result = await updateStageStatus(stageId, next);
-    if (result.error) toast.error(result.error);
+    setCyclingId(null);
+    if (result.error) {
+      toast.error(result.error);
+      // Rollback
+      setStages((prev) =>
+        prev.map((s) => (s.stageId === stageId ? { ...s, status: current.status } : s))
+      );
+    }
     router.refresh();
   };
 
   const handleToggleTask = async (taskId: string, isDone: boolean) => {
+    if (togglingTaskId === taskId) return;
+    setTogglingTaskId(taskId);
+    // Optimistic update
     setStages((prev) =>
       prev.map((s) => ({
         ...s,
@@ -109,6 +129,7 @@ export default function StageProgressPopup({
     );
 
     await toggleStageTask(taskId, isDone);
+    setTogglingTaskId(null);
     router.refresh();
   };
 
@@ -153,11 +174,37 @@ export default function StageProgressPopup({
             return (
               <div key={stage.stageId} className="border-b border-zinc-800/50 last:border-b-0">
                 <div className="flex items-center gap-3 py-2.5">
-                  <button
-                    onClick={() => handleCycleStatus(stage.stageId)}
-                    className={`h-3 w-3 shrink-0 rounded-full ${STAGE_COLORS[stage.status]} cursor-pointer transition-transform hover:scale-125`}
-                    title={`${STATUS_LABEL[stage.status]} — click to advance`}
-                  />
+                  {/* Status dot — cycles through statuses on click, shows spinner while saving */}
+                  <div className="relative h-3 w-3 shrink-0">
+                    {cyclingId === stage.stageId ? (
+                      <svg
+                        className="h-3 w-3 animate-spin text-zinc-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        />
+                      </svg>
+                    ) : (
+                      <button
+                        onClick={() => handleCycleStatus(stage.stageId)}
+                        disabled={!!cyclingId}
+                        className={`h-3 w-3 rounded-full ${STAGE_COLORS[stage.status]} transition-transform hover:scale-125 disabled:cursor-not-allowed disabled:opacity-50`}
+                        title={`${STATUS_LABEL[stage.status]} — klik untuk advance`}
+                      />
+                    )}
+                  </div>
 
                   <button
                     onClick={() => setExpanded(isExpanded ? null : stage.stageId)}
@@ -167,6 +214,13 @@ export default function StageProgressPopup({
                     {totalTasks > 0 && (
                       <span className="ml-2 text-xs text-zinc-500">
                         {doneTasks}/{totalTasks}
+                      </span>
+                    )}
+                    {/* Fitur 2: show who completed this stage and when */}
+                    {stage.status === "done" && stage.completed_by_name && (
+                      <span className="mt-0.5 block text-xs font-normal text-emerald-500/80">
+                        Selesai oleh {stage.completed_by_name}
+                        {stage.completed_at && ` · ${formatDate(stage.completed_at)}`}
                       </span>
                     )}
                   </button>
@@ -187,13 +241,14 @@ export default function StageProgressPopup({
                     {stage.tasks.map((task) => (
                       <label
                         key={task.id}
-                        className="flex items-center gap-2 cursor-pointer rounded px-2 py-1 hover:bg-zinc-800/50"
+                        className={`flex items-center gap-2 cursor-pointer rounded px-2 py-1 hover:bg-zinc-800/50 transition-opacity ${togglingTaskId === task.id ? "opacity-50" : ""}`}
                       >
                         <input
                           type="checkbox"
                           checked={task.is_done}
                           onChange={(e) => handleToggleTask(task.id, e.target.checked)}
-                          className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white shrink-0"
+                          disabled={togglingTaskId === task.id}
+                          className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white shrink-0 disabled:cursor-not-allowed"
                         />
                         <span className={`text-xs ${task.is_done ? "text-zinc-500 line-through" : "text-zinc-300"}`}>
                           {task.label}
