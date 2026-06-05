@@ -150,7 +150,7 @@ export async function importClientsCSV(csvContent: string) {
     for (const tt of builtInTaskTypes ?? []) {
       const { data: defaultStages } = await supabase
         .from("stage_templates")
-        .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day")
+        .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day, planned_date_day, default_assignee_type")
         .eq("task_type_id", tt.id)
         .is("client_id", null)
         .eq("is_active", true)
@@ -169,6 +169,8 @@ export async function importClientsCSV(csvContent: string) {
         is_active: true,
         hard_deadline_day: hardDeadlineDay,
         default_deadline_day: s.default_deadline_day ?? null,
+        planned_date_day: (s as { planned_date_day?: number | null }).planned_date_day ?? null,
+        default_assignee_type: (s as { default_assignee_type?: string }).default_assignee_type ?? "pic",
       }));
 
       await supabase.from("stage_templates").upsert(stageInserts, {
@@ -198,6 +200,9 @@ export async function importClientsCSV(csvContent: string) {
         order_index: s.order_index,
         status: "not_started",
         internal_deadline: computeDeadline(month, year, s.default_deadline_day ?? null),
+        planned_date: computeDeadline(month, year, (s as { planned_date_day?: number | null }).planned_date_day ?? null),
+        // CSV import has no PIC — assignee stays null regardless of template setting
+        assignee_user_id: null,
       }));
 
       await supabase.from("period_stages").insert(stageSnapshots);

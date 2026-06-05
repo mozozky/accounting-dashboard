@@ -44,6 +44,10 @@ export interface StageTemplate {
   is_active: boolean;
   hard_deadline_day: number | null;
   default_deadline_day: number | null;
+  /** Day-of-month for planned date in the next month (review target). Null = no default. */
+  planned_date_day: number | null;
+  /** Default assignee behaviour: 'pic' = auto-fill client PIC, 'none' = leave unassigned. */
+  default_assignee_type: "pic" | "none";
 }
 
 export interface ClientPeriod {
@@ -63,6 +67,8 @@ export interface PeriodStage {
   order_index: number;
   status: StageStatus;
   internal_deadline: string | null;
+  /** Review target date set by the team. Used by managers to track missed dates. */
+  planned_date: string | null;
   assignee_user_id: string | null;
   notes: string | null;
   updated_at: string;

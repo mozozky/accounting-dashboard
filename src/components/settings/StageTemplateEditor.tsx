@@ -32,6 +32,8 @@ interface StageData {
   is_billable: boolean;
   is_active: boolean;
   default_deadline_day: number | null;
+  planned_date_day: number | null;
+  default_assignee_type: "pic" | "none";
 }
 
 interface Props {
@@ -185,6 +187,8 @@ export default function StageTemplateEditor({
           is_billable: result.stage!.is_billable,
           is_active: result.stage!.is_active,
           default_deadline_day: null,
+          planned_date_day: null,
+          default_assignee_type: "pic" as const,
         },
       ]);
     }

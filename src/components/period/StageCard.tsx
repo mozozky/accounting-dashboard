@@ -10,6 +10,7 @@ interface Props {
     stage_name: string;
     order_index: number;
     status: StageStatus;
+    planned_date: string | null;
     internal_deadline: string | null;
     assignee_user_id: string | null;
     notes: string | null;
@@ -17,6 +18,7 @@ interface Props {
   tasks: StageTask[];
   teamMembers: { id: string; full_name: string | null }[];
   onChangeStatus: (stageId: string, status: StageStatus) => void;
+  onChangePlannedDate: (stageId: string, date: string | null) => void;
   onChangeDeadline: (stageId: string, deadline: string | null) => void;
   onChangeAssignee: (stageId: string, userId: string | null) => void;
   onChangeNotes: (stageId: string, notes: string | null) => void;
@@ -43,108 +45,65 @@ const BADGE_COLORS: Record<StageStatus, string> = {
   blocked: "bg-red-600 text-white",
 };
 
-function Spinner() {
-  return (
-    <svg
-      className="h-3 w-3 animate-spin text-zinc-400"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-      />
-    </svg>
-  );
-}
-
 export default function StageCard({
   stage,
   tasks,
   teamMembers,
   onChangeStatus,
+  onChangePlannedDate,
   onChangeDeadline,
   onChangeAssignee,
   onChangeNotes,
 }: Props) {
   const [notesDraft, setNotesDraft] = useState(stage.notes ?? "");
-  const [deadlineDraft, setDeadlineDraft] = useState(
-    stage.internal_deadline ?? ""
-  );
+  const [plannedDraft, setPlannedDraft] = useState(stage.planned_date ?? "");
+  const [deadlineDraft, setDeadlineDraft] = useState(stage.internal_deadline ?? "");
   const [statusWarning, setStatusWarning] = useState(false);
-
-  // Per-field saving indicators
-  const [savingStatus, setSavingStatus] = useState(false);
-  const [savingAssignee, setSavingAssignee] = useState(false);
-  const [savingNotes, setSavingNotes] = useState(false);
-  const [savingDeadline, setSavingDeadline] = useState(false);
-
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const notesTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const plannedTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     setNotesDraft(stage.notes ?? "");
+    setPlannedDraft(stage.planned_date ?? "");
     setDeadlineDraft(stage.internal_deadline ?? "");
     setStatusWarning(stage.status === "blocked" && !stage.notes?.trim());
-  }, [stage.notes, stage.internal_deadline, stage.status]);
+  }, [stage.notes, stage.planned_date, stage.internal_deadline, stage.status]);
 
   const handleStatusChange = (newStatus: StageStatus) => {
     if (newStatus === stage.status) return;
-
     if (newStatus === "blocked" && !notesDraft.trim()) {
       setStatusWarning(true);
       setTimeout(() => notesRef.current?.focus(), 100);
     } else {
       setStatusWarning(false);
     }
-
-    setSavingStatus(true);
-    // onChangeStatus fires the server action; it resolves async in PeriodDetailClient
-    // We clear the spinner after a short settled delay (revalidatePath triggers reload)
-    Promise.resolve(onChangeStatus(stage.id, newStatus)).finally(() =>
-      setSavingStatus(false)
-    );
+    onChangeStatus(stage.id, newStatus);
   };
 
-  const handleAssigneeChange = (userId: string | null) => {
-    setSavingAssignee(true);
-    Promise.resolve(onChangeAssignee(stage.id, userId)).finally(() =>
-      setSavingAssignee(false)
-    );
-  };
-
-  const handleNotesChange = (value: string) => {
-    setNotesDraft(value);
-    if (value.trim()) setStatusWarning(false);
-
-    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
-    notesTimerRef.current = setTimeout(() => {
-      setSavingNotes(true);
-      Promise.resolve(onChangeNotes(stage.id, value || null)).finally(() =>
-        setSavingNotes(false)
-      );
+  const handlePlannedDateChange = (value: string) => {
+    setPlannedDraft(value);
+    if (plannedTimerRef.current) clearTimeout(plannedTimerRef.current);
+    plannedTimerRef.current = setTimeout(() => {
+      onChangePlannedDate(stage.id, value || null);
     }, 800);
   };
 
   const handleDeadlineChange = (value: string) => {
     setDeadlineDraft(value);
-
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
     deadlineTimerRef.current = setTimeout(() => {
-      setSavingDeadline(true);
-      Promise.resolve(onChangeDeadline(stage.id, value || null)).finally(() =>
-        setSavingDeadline(false)
-      );
+      onChangeDeadline(stage.id, value || null);
+    }, 800);
+  };
+
+  const handleNotesChange = (value: string) => {
+    setNotesDraft(value);
+    if (value.trim()) setStatusWarning(false);
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => {
+      onChangeNotes(stage.id, value || null);
     }, 800);
   };
 
@@ -155,6 +114,7 @@ export default function StageCard({
     <div
       className={`rounded-lg border ${STATUS_COLORS[stage.status]} p-4 transition-colors`}
     >
+      {/* Header row: stage label + status dropdown */}
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-medium text-zinc-500">
@@ -170,26 +130,21 @@ export default function StageCard({
           </span>
         </div>
 
-        {/* Status dropdown + per-card saving indicator */}
-        <div className="flex items-center gap-2">
-          {savingStatus && <Spinner />}
-          <select
-            value={stage.status}
-            onChange={(e) => handleStatusChange(e.target.value as StageStatus)}
-            disabled={savingStatus}
-            className={`rounded border px-2 py-1 text-xs focus:outline-none transition-opacity ${STATUS_COLORS[stage.status]} ${savingStatus ? "cursor-not-allowed opacity-60" : ""}`}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option
-                key={opt.value}
-                value={opt.value}
-                className="bg-zinc-800 text-white"
-              >
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={stage.status}
+          onChange={(e) => handleStatusChange(e.target.value as StageStatus)}
+          className={`rounded border px-2 py-1 text-xs focus:outline-none ${STATUS_COLORS[stage.status]}`}
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <option
+              key={opt.value}
+              value={opt.value}
+              className="bg-zinc-800 text-white"
+            >
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {statusWarning && (
@@ -198,33 +153,47 @@ export default function StageCard({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      {/* Field grid: 3 columns on wider screens */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Planned Date — review target, shown first & purple-tinted */}
+        <div>
+          <label className="mb-1 flex items-center gap-1 text-xs font-medium text-violet-400/80">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400/60" />
+            Planned Date
+          </label>
+          <input
+            type="date"
+            value={plannedDraft}
+            onChange={(e) => handlePlannedDateChange(e.target.value)}
+            className="w-full rounded border border-violet-800/40 bg-zinc-800 px-2 py-1 text-xs text-violet-300 focus:border-violet-600 focus:outline-none"
+            title="Review target date — tracked by manager"
+          />
+        </div>
+
         {/* Internal Deadline */}
         <div>
-          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
             Internal Deadline
-            {savingDeadline && <Spinner />}
           </label>
           <input
             type="date"
             value={deadlineDraft}
             onChange={(e) => handleDeadlineChange(e.target.value)}
-            disabled={savingDeadline}
-            className={`w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none transition-opacity ${savingDeadline ? "opacity-60" : ""}`}
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none"
           />
         </div>
 
         {/* Assignee */}
         <div>
-          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+          <label className="mb-1 block text-xs font-medium text-zinc-500">
             Assignee
-            {savingAssignee && <Spinner />}
           </label>
           <select
             value={stage.assignee_user_id ?? ""}
-            onChange={(e) => handleAssigneeChange(e.target.value || null)}
-            disabled={savingAssignee}
-            className={`w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none transition-opacity ${savingAssignee ? "opacity-60 cursor-not-allowed" : ""}`}
+            onChange={(e) =>
+              onChangeAssignee(stage.id, e.target.value || null)
+            }
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white focus:border-zinc-500 focus:outline-none"
           >
             <option value="" className="bg-zinc-800">
               Unassigned
@@ -240,9 +209,8 @@ export default function StageCard({
 
       {/* Notes */}
       <div className="mt-4">
-        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+        <label className="mb-1 block text-xs font-medium text-zinc-500">
           Notes
-          {savingNotes && <Spinner />}
         </label>
         <textarea
           ref={notesRef}
