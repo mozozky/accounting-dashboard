@@ -125,6 +125,21 @@ export async function updateStageDeadline(stageId: string, deadline: string | nu
   return { success: true };
 }
 
+export async function updateStagePlannedDate(stageId: string, date: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("period_stages")
+    .update({
+      planned_date: date,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", stageId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/[periodId]", "page");
+  return { success: true };
+}
+
 export async function updateStageAssignee(stageId: string, userId: string | null) {
   const supabase = await createClient();
   const { error } = await supabase

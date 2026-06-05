@@ -8,6 +8,7 @@ import SavingIndicator from "./SavingIndicator";
 import {
   updateStageStatus,
   updateStageDeadline,
+  updateStagePlannedDate,
   updateStageAssignee,
   updateStageNotes,
   updatePeriodDeadline,
@@ -20,6 +21,7 @@ interface StageData {
   stage_name: string;
   order_index: number;
   status: StageStatus;
+  planned_date: string | null;
   internal_deadline: string | null;
   assignee_user_id: string | null;
   notes: string | null;
@@ -134,6 +136,27 @@ export default function PeriodDetailClient({
           setStages((cur) =>
             cur.map((s) =>
               s.id === stageId ? { ...s, internal_deadline: prev ?? null } : s
+            )
+          )
+      );
+    },
+    [stages, trackSaving]
+  );
+
+  const handleChangePlannedDate = useCallback(
+    (stageId: string, date: string | null) => {
+      const prev = stages.find((s) => s.id === stageId)?.planned_date;
+      setStages((cur) =>
+        cur.map((s) =>
+          s.id === stageId ? { ...s, planned_date: date } : s
+        )
+      );
+      trackSaving(
+        () => updateStagePlannedDate(stageId, date),
+        () =>
+          setStages((cur) =>
+            cur.map((s) =>
+              s.id === stageId ? { ...s, planned_date: prev ?? null } : s
             )
           )
       );
@@ -258,6 +281,7 @@ export default function PeriodDetailClient({
               tasks={stageTasks[stage.id] ?? []}
               teamMembers={teamMembers}
               onChangeStatus={handleChangeStatus}
+              onChangePlannedDate={handleChangePlannedDate}
               onChangeDeadline={handleChangeDeadline}
               onChangeAssignee={handleChangeAssignee}
               onChangeNotes={handleChangeNotes}

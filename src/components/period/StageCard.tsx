@@ -10,6 +10,7 @@ interface Props {
     stage_name: string;
     order_index: number;
     status: StageStatus;
+    planned_date: string | null;
     internal_deadline: string | null;
     assignee_user_id: string | null;
     notes: string | null;
@@ -17,6 +18,7 @@ interface Props {
   tasks: StageTask[];
   teamMembers: { id: string; full_name: string | null }[];
   onChangeStatus: (stageId: string, status: StageStatus) => void;
+  onChangePlannedDate: (stageId: string, date: string | null) => void;
   onChangeDeadline: (stageId: string, deadline: string | null) => void;
   onChangeAssignee: (stageId: string, userId: string | null) => void;
   onChangeNotes: (stageId: string, notes: string | null) => void;
@@ -48,63 +50,71 @@ export default function StageCard({
   tasks,
   teamMembers,
   onChangeStatus,
+  onChangePlannedDate,
   onChangeDeadline,
   onChangeAssignee,
   onChangeNotes,
 }: Props) {
   const [notesDraft, setNotesDraft] = useState(stage.notes ?? "");
-  const [deadlineDraft, setDeadlineDraft] = useState(
-    stage.internal_deadline ?? ""
-  );
+  const [plannedDraft, setPlannedDraft] = useState(stage.planned_date ?? "");
+  const [deadlineDraft, setDeadlineDraft] = useState(stage.internal_deadline ?? "");
   const [statusWarning, setStatusWarning] = useState(false);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const notesTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const plannedTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     setNotesDraft(stage.notes ?? "");
+    setPlannedDraft(stage.planned_date ?? "");
     setDeadlineDraft(stage.internal_deadline ?? "");
     setStatusWarning(stage.status === "blocked" && !stage.notes?.trim());
-  }, [stage.notes, stage.internal_deadline, stage.status]);
+  }, [stage.notes, stage.planned_date, stage.internal_deadline, stage.status]);
 
   const handleStatusChange = (newStatus: StageStatus) => {
     if (newStatus === stage.status) return;
-
     if (newStatus === "blocked" && !notesDraft.trim()) {
       setStatusWarning(true);
       setTimeout(() => notesRef.current?.focus(), 100);
     } else {
       setStatusWarning(false);
     }
-
     onChangeStatus(stage.id, newStatus);
   };
 
-  const handleNotesChange = (value: string) => {
-    setNotesDraft(value);
-    if (value.trim()) setStatusWarning(false);
-
-    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
-    notesTimerRef.current = setTimeout(() => {
-      onChangeNotes(stage.id, value || null);
+  const handlePlannedDateChange = (value: string) => {
+    setPlannedDraft(value);
+    if (plannedTimerRef.current) clearTimeout(plannedTimerRef.current);
+    plannedTimerRef.current = setTimeout(() => {
+      onChangePlannedDate(stage.id, value || null);
     }, 800);
   };
 
   const handleDeadlineChange = (value: string) => {
     setDeadlineDraft(value);
-
     if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
     deadlineTimerRef.current = setTimeout(() => {
       onChangeDeadline(stage.id, value || null);
     }, 800);
   };
 
-  const isBlockedWithoutNotes = stage.status === "blocked" && !notesDraft.trim();
+  const handleNotesChange = (value: string) => {
+    setNotesDraft(value);
+    if (value.trim()) setStatusWarning(false);
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => {
+      onChangeNotes(stage.id, value || null);
+    }, 800);
+  };
+
+  const isBlockedWithoutNotes =
+    stage.status === "blocked" && !notesDraft.trim();
 
   return (
     <div
       className={`rounded-lg border ${STATUS_COLORS[stage.status]} p-4 transition-colors`}
     >
+      {/* Header row: stage label + status dropdown */}
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-medium text-zinc-500">
@@ -120,19 +130,21 @@ export default function StageCard({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={stage.status}
-            onChange={(e) => handleStatusChange(e.target.value as StageStatus)}
-            className={`rounded border px-2 py-1 text-xs focus:outline-none ${STATUS_COLORS[stage.status]}`}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-zinc-800 text-white">
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={stage.status}
+          onChange={(e) => handleStatusChange(e.target.value as StageStatus)}
+          className={`rounded border px-2 py-1 text-xs focus:outline-none ${STATUS_COLORS[stage.status]}`}
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <option
+              key={opt.value}
+              value={opt.value}
+              className="bg-zinc-800 text-white"
+            >
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {statusWarning && (
@@ -141,7 +153,24 @@ export default function StageCard({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      {/* Field grid: 3 columns on wider screens */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Planned Date — review target, shown first & purple-tinted */}
+        <div>
+          <label className="mb-1 flex items-center gap-1 text-xs font-medium text-violet-400/80">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400/60" />
+            Planned Date
+          </label>
+          <input
+            type="date"
+            value={plannedDraft}
+            onChange={(e) => handlePlannedDateChange(e.target.value)}
+            className="w-full rounded border border-violet-800/40 bg-zinc-800 px-2 py-1 text-xs text-violet-300 focus:border-violet-600 focus:outline-none"
+            title="Review target date — tracked by manager"
+          />
+        </div>
+
+        {/* Internal Deadline */}
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">
             Internal Deadline
@@ -154,6 +183,7 @@ export default function StageCard({
           />
         </div>
 
+        {/* Assignee */}
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-500">
             Assignee
@@ -169,11 +199,7 @@ export default function StageCard({
               Unassigned
             </option>
             {teamMembers.map((m) => (
-              <option
-                key={m.id}
-                value={m.id}
-                className="bg-zinc-800"
-              >
+              <option key={m.id} value={m.id} className="bg-zinc-800">
                 {m.full_name ?? m.id}
               </option>
             ))}
@@ -181,6 +207,7 @@ export default function StageCard({
         </div>
       </div>
 
+      {/* Notes */}
       <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-zinc-500">
           Notes
