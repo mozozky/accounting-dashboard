@@ -24,6 +24,38 @@ export function daysFromNowWIB(n: number): string {
 }
 
 /**
+ * Returns the current { month (1-12), year } in WIB.
+ */
+export function currentMonthYearWIB(): { month: number; year: number } {
+  const ymd = todayWIB(); // "YYYY-MM-DD"
+  const [year, month] = ymd.split("-").map(Number);
+  return { month, year };
+}
+
+const ID_MONTHS = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+/**
+ * Formats a month (1-12) + year into an Indonesian label, e.g. "Mei 2026".
+ */
+export function formatMonthYearID(month: number, year: number): string {
+  const name = ID_MONTHS[month - 1] ?? `Bulan ${month}`;
+  return `${name} ${year}`;
+}
+
+/**
  * Computes a deadline date string (YYYY-MM-DD) as:
  *   the `day`-th day of the NEXT month after the given month/year.
  * Returns null if day is null/0.

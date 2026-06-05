@@ -80,6 +80,8 @@ export default async function PeriodDetailPage({
         teamMembers={teamMembers}
         clientName={client?.name ?? ""}
         taskTypeName={taskType?.name ?? ""}
+        periodMonth={period.period_month}
+        periodYear={period.period_year}
       />
     </div>
   );
