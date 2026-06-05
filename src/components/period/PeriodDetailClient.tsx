@@ -12,6 +12,7 @@ import {
   updateStageNotes,
   updatePeriodDeadline,
 } from "@/lib/period-actions";
+import { currentMonthYearWIB, formatMonthYearID } from "@/lib/utils/date";
 import type { StageStatus, StageTask } from "@/lib/types";
 
 interface StageData {
@@ -32,6 +33,8 @@ interface Props {
   teamMembers: { id: string; full_name: string | null }[];
   clientName: string;
   taskTypeName: string;
+  periodMonth: number;
+  periodYear: number;
 }
 
 export default function PeriodDetailClient({
@@ -42,12 +45,23 @@ export default function PeriodDetailClient({
   teamMembers,
   clientName,
   taskTypeName,
+  periodMonth,
+  periodYear,
 }: Props) {
   const [stages, setStages] = useState(initialStages);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const deadlineTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [deadlineDraft, setDeadlineDraft] = useState(initialDeadline ?? "");
+
+  // Period month context — used to make the working period obvious and to
+  // warn when the user is editing a period that isn't the current month.
+  const periodLabel = formatMonthYearID(periodMonth, periodYear);
+  const { month: curMonth, year: curYear } = currentMonthYearWIB();
+  const isCurrentMonth = periodMonth === curMonth && periodYear === curYear;
+  const isPast =
+    periodYear < curYear ||
+    (periodYear === curYear && periodMonth < curMonth);
 
   /**
    * Wraps a server action call with saving state + error handling.
@@ -183,7 +197,18 @@ export default function PeriodDetailClient({
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">{clientName}</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-semibold text-white">{clientName}</h1>
+            <span
+              className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                isCurrentMonth
+                  ? "bg-zinc-800 text-zinc-300"
+                  : "bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30"
+              }`}
+            >
+              {periodLabel}
+            </span>
+          </div>
           <p className="mt-0.5 text-sm text-zinc-400">{taskTypeName}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -201,6 +226,24 @@ export default function PeriodDetailClient({
           <SavingIndicator saving={saving} error={saveError} />
         </div>
       </div>
+
+      {!isCurrentMonth && (
+        <div className="mb-6 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          {isPast ? (
+            <>
+              Kamu sedang membuka period <strong>{periodLabel}</strong> (bulan
+              lalu), bukan bulan berjalan ({formatMonthYearID(curMonth, curYear)}
+              ). Pastikan kamu mengupdate period yang benar.
+            </>
+          ) : (
+            <>
+              Kamu sedang membuka period <strong>{periodLabel}</strong> (bulan
+              mendatang), bukan bulan berjalan (
+              {formatMonthYearID(curMonth, curYear)}).
+            </>
+          )}
+        </div>
+      )}
 
       <div className="space-y-3">
         {stages.map((stage, i) => (

@@ -216,7 +216,10 @@ export default function StageTemplateEditor({
       </div>
 
       <div className="mb-3 rounded-md border border-zinc-700/50 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-500">
-        Perubahan hanya berlaku untuk period yang di-generate setelah ini. Period yang sudah ada tidak akan berubah.
+        Mengubah template di sini hanya berlaku untuk period yang di-generate
+        berikutnya — ini menjaga data period yang sudah berjalan tetap utuh.
+        Untuk mengubah period yang sudah ada, edit langsung di halaman period
+        task-nya.
       </div>
 
       <DndContext
