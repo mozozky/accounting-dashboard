@@ -94,6 +94,8 @@ clients ──────┬─────────────────
 | 013 | `013_fix_role_assignment.sql` | Atomic RPC assign_user_role() + write policy user_roles untuk leader |
 | 014 | `014_fix_user_delete_fks.sql` | FK pic_user_id, assignee_user_id, completed_by_user_id → ON DELETE SET NULL |
 | 015 | `015_split_bpjs_tax.sql` | Split "BPJS & Tax" jadi BPJS + Tax terpisah, auto-assign ke existing clients, generate May 2026 periods |
+| 016 | `016_planned_date_assignee.sql` | Tambah planned_date (review target manager) + default_assignee_type (auto-assign PIC ke stage) |
+| 017 | `017_backfill_assignee_may.sql` | One-time backfill: isi assignee Mei 2026 dari PIC client (hanya yang masih kosong) |
 
 ---
 
@@ -321,7 +323,7 @@ src/
 │       └── date.ts                 # Date utils (WIB timezone)
 │
 └── supabase/
-    └── migrations/                 # 15 migration files (001–015)
+    └── migrations/                 # 17 migration files (001–017)
 ```
 
 ---
@@ -330,7 +332,7 @@ src/
 
 - [x] Auth + login jalan
 - [x] `SIGNUP_CODE` di-set di Vercel env vars
-- [x] Semua migration (001–015) dijalankan di Supabase
+- [x] Semua migration (001–016) dijalankan di Supabase; 017 untuk backfill assignee Mei 2026
 - [x] Supabase URL Configuration updated ke domain Vercel
 - [x] `SUPABASE_SERVICE_ROLE_KEY` di-set (untuk remove user)
 - [x] Dashboard tampil klien + status badges
