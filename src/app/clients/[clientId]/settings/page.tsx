@@ -86,6 +86,8 @@ export default async function ClientSettingsPage({
         is_billable: boolean;
         is_active: boolean;
         default_deadline_day: number | null;
+        planned_date_day: number | null;
+        default_assignee_type: "pic" | "none";
       }[];
     }
   >();
@@ -111,6 +113,8 @@ export default async function ClientSettingsPage({
           is_billable: s.is_billable,
           is_active: s.is_active,
           default_deadline_day: s.default_deadline_day ?? null,
+          planned_date_day: (s as { planned_date_day?: number | null }).planned_date_day ?? null,
+          default_assignee_type: ((s as { default_assignee_type?: string }).default_assignee_type ?? "pic") as "pic" | "none",
         })),
       });
     }

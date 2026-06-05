@@ -297,3 +297,34 @@ export async function deleteTaskTemplate(id: string) {
   revalidatePath("/clients/[clientId]/settings");
   return { success: true };
 }
+
+
+export async function updateStagePlannedDateDay(
+  stageId: string,
+  day: number | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stage_templates")
+    .update({ planned_date_day: day })
+    .eq("id", stageId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true };
+}
+
+export async function updateStageDefaultAssignee(
+  stageId: string,
+  type: "pic" | "none"
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stage_templates")
+    .update({ default_assignee_type: type })
+    .eq("id", stageId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/clients/[clientId]/settings");
+  return { success: true };
+}

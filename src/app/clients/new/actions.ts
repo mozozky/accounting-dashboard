@@ -60,7 +60,7 @@ export async function addClient(formData: FormData) {
     // Copy default stages to client
     const { data: defaultStages } = await supabase
       .from("stage_templates")
-      .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day")
+      .select("stage_name, order_index, is_billable, hard_deadline_day, default_deadline_day, planned_date_day, default_assignee_type")
       .eq("task_type_id", tt.id)
       .is("client_id", null)
       .eq("is_active", true)
@@ -78,6 +78,8 @@ export async function addClient(formData: FormData) {
       is_active: true,
       hard_deadline_day: hardDeadlineDay,
       default_deadline_day: s.default_deadline_day ?? null,
+      planned_date_day: (s as { planned_date_day?: number | null }).planned_date_day ?? null,
+      default_assignee_type: (s as { default_assignee_type?: string }).default_assignee_type ?? "pic",
     }));
 
     await supabase.from("stage_templates").upsert(stageInserts, {
@@ -107,6 +109,12 @@ export async function addClient(formData: FormData) {
       order_index: s.order_index,
       status: "not_started",
       internal_deadline: computeDeadline(month, year, s.default_deadline_day ?? null),
+      planned_date: computeDeadline(month, year, (s as { planned_date_day?: number | null }).planned_date_day ?? null),
+      // Fitur 2: auto-assign PIC if default_assignee_type is 'pic'
+      assignee_user_id:
+        ((s as { default_assignee_type?: string }).default_assignee_type ?? "pic") === "pic"
+          ? (picUserId || null)
+          : null,
     }));
 
     await supabase.from("period_stages").insert(stageSnapshots);

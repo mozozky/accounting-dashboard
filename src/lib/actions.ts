@@ -28,13 +28,23 @@ export async function generatePeriodForClientAction(
 ) {
   const supabase = await createClient();
 
-  const { data: templates } = await supabase
-    .from("stage_templates")
-    .select("*")
-    .eq("client_id", clientId)
-    .eq("task_type_id", taskTypeId)
-    .eq("is_active", true)
-    .order("order_index");
+  // Fetch templates AND the client's pic_user_id for auto-assignee
+  const [{ data: templates }, { data: clientRow }] = await Promise.all([
+    supabase
+      .from("stage_templates")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("task_type_id", taskTypeId)
+      .eq("is_active", true)
+      .order("order_index"),
+    supabase
+      .from("clients")
+      .select("pic_user_id")
+      .eq("id", clientId)
+      .single(),
+  ]);
+
+  const picUserId = clientRow?.pic_user_id ?? null;
 
   if (!templates || templates.length === 0) {
     return { error: "No active stage templates for this client + task type" };
@@ -71,6 +81,10 @@ export async function generatePeriodForClientAction(
     order_index: t.order_index,
     status: "not_started",
     internal_deadline: computeDeadline(month, year, t.default_deadline_day ?? null),
+    planned_date: computeDeadline(month, year, t.planned_date_day ?? null),
+    // Fitur 2: auto-assign PIC if default_assignee_type is 'pic'
+    assignee_user_id:
+      (t.default_assignee_type ?? "pic") === "pic" ? picUserId : null,
   }));
 
   await supabase.from("period_stages").insert(stages);
@@ -145,13 +159,22 @@ export async function generateNextMonthAction() {
   let skipped = 0;
 
   for (const { clientId, taskTypeId } of combos) {
-    const { data: templates } = await supabase
-      .from("stage_templates")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("task_type_id", taskTypeId)
-      .eq("is_active", true)
-      .order("order_index");
+    const [{ data: templates }, { data: clientRow }] = await Promise.all([
+      supabase
+        .from("stage_templates")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("task_type_id", taskTypeId)
+        .eq("is_active", true)
+        .order("order_index"),
+      supabase
+        .from("clients")
+        .select("pic_user_id")
+        .eq("id", clientId)
+        .single(),
+    ]);
+
+    const picUserId = clientRow?.pic_user_id ?? null;
 
     if (!templates || templates.length === 0) {
       skipped++;
@@ -201,6 +224,9 @@ export async function generateNextMonthAction() {
       order_index: t.order_index,
       status: "not_started",
       internal_deadline: computeDeadline(nextMonth, nextYear, t.default_deadline_day ?? null),
+      planned_date: computeDeadline(nextMonth, nextYear, t.planned_date_day ?? null),
+      assignee_user_id:
+        (t.default_assignee_type ?? "pic") === "pic" ? picUserId : null,
     }));
 
     await supabase.from("period_stages").insert(stages);
