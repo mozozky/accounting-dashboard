@@ -72,8 +72,10 @@ Run these in Supabase SQL Editor **in order**:
 | 13 | `013_fix_role_assignment.sql` | Atomic role assignment RPC + user_roles write policy for leaders |
 | 14 | `014_fix_user_delete_fks.sql` | Fix FK constraints to allow deleting users (ON DELETE SET NULL) |
 | 15 | `015_split_bpjs_tax.sql` | Split "BPJS & Tax" into separate BPJS (deadline day 10) and Tax (deadline day 15) built-in task types |
+| 16 | `016_planned_date_assignee.sql` | Add planned_date (review target) + default_assignee_type (auto-assign PIC) |
+| 17 | `017_backfill_assignee_may.sql` | One-time backfill: fill May 2026 assignees from client PIC (only empty ones) |
 
-> **Fresh setup:** Skip 003 (dev seed), 005, 006 (superseded). Run 001, 002, 004, 007–015 in order.
+> **Fresh setup:** Skip 003 (dev seed), 005, 006 (superseded), 017 (one-time backfill for existing May 2026 data). Run 001, 002, 004, 007–016 in order.
 
 ### Run Locally
 
