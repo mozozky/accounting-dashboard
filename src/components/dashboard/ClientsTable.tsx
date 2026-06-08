@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ import {
   bulkAdvanceStage,
 } from "@/lib/actions";
 import type { StageStatus } from "@/lib/types";
+
+const PAGE_SIZE = 20;
 
 export interface ClientRow {
   clientId: string;
@@ -79,6 +81,28 @@ export default function ClientsTable({
     });
   }, [clients, search, picFilter, statusFilter, taskTypeFilter]);
 
+  // --- Group filtered rows into status buckets for sectioned display ---
+  const groups = useMemo(() => {
+    const inProgress: ClientRow[] = [];
+    const notStarted: ClientRow[] = [];
+    const done: ClientRow[] = [];
+    for (const c of filtered) {
+      if (c.status === "done") done.push(c);
+      else if (c.status === "not_started" || c.status === "no_period")
+        notStarted.push(c);
+      else inProgress.push(c); // in_progress, blocked, overdue
+    }
+    return { inProgress, notStarted, done };
+  }, [filtered]);
+
+  // Independent pagination per section.
+  const [pages, setPages] = useState({ inProgress: 1, notStarted: 1, done: 1 });
+
+  // Reset all section pages whenever the filters change.
+  useEffect(() => {
+    setPages({ inProgress: 1, notStarted: 1, done: 1 });
+  }, [search, picFilter, statusFilter, taskTypeFilter]);
+
   const handleGeneratePeriod = async (clientId: string, taskTypeId: string) => {
     const key = `${clientId}-${taskTypeId}`;
     setGenerating((prev) => ({ ...prev, [key]: true }));
@@ -107,9 +131,15 @@ export default function ClientsTable({
     });
   };
 
-  const toggleSelectAll = () => {
-    const allKeys = new Set(filtered.map(rowKey));
-    setSelected(selected.size === allKeys.size ? new Set() : allKeys);
+  const toggleSelectGroup = (rows: ClientRow[]) => {
+    const keys = rows.map(rowKey);
+    const allSelected = keys.length > 0 && keys.every((k) => selected.has(k));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) keys.forEach((k) => next.delete(k));
+      else keys.forEach((k) => next.add(k));
+      return next;
+    });
   };
 
   const handleBulkAction = async () => {
@@ -142,6 +172,167 @@ export default function ClientsTable({
     )
       return "border-l-2 border-l-amber-500 bg-amber-950/10";
     return "";
+  };
+
+  const renderRow = (client: ClientRow, i: number) => (
+    <motion.tr
+      key={rowKey(client)}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: i * 0.03 }}
+      className={`border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50 ${getRowClasses(client)}`}
+    >
+      <td className="w-8 px-2 py-3">
+        <input
+          type="checkbox"
+          checked={selected.has(rowKey(client))}
+          onChange={() => toggleSelect(rowKey(client))}
+          className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
+        />
+      </td>
+      <td className="px-4 py-3 font-medium">
+        {client.hasPeriod ? (
+          <Link
+            href={`/clients/${client.clientId}/${client.periodId}`}
+            className="text-white transition-colors hover:text-zinc-300"
+          >
+            {client.clientName}
+          </Link>
+        ) : (
+          <span className="text-white">{client.clientName}</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
+          {client.taskTypeName}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-zinc-400">{client.picName ?? "-"}</td>
+      <td className="px-4 py-3">
+        <StageTimeline
+          stages={client.stages}
+          hasPeriod={client.hasPeriod}
+          onClick={() =>
+            setPopupRow(client.hasPeriod && client.stageDetails ? client : null)
+          }
+        />
+      </td>
+      <td className="px-4 py-3 tabular-nums text-zinc-400">
+        {client.hardDeadline
+          ? new Date(client.hardDeadline).toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "short",
+            })
+          : "-"}
+      </td>
+      <td className="px-4 py-3">
+        <StatusBadge status={client.status} />
+      </td>
+      <td className="px-4 py-3 text-right">
+        {!client.hasPeriod && (
+          <button
+            onClick={() =>
+              handleGeneratePeriod(client.clientId, client.taskTypeId)
+            }
+            disabled={generating[`${client.clientId}-${client.taskTypeId}`]}
+            className="rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {generating[`${client.clientId}-${client.taskTypeId}`]
+              ? "..."
+              : "Generate"}
+          </button>
+        )}
+      </td>
+    </motion.tr>
+  );
+
+  const renderSection = (
+    title: string,
+    rows: ClientRow[],
+    pageKey: keyof typeof pages,
+    accent: string
+  ) => {
+    if (rows.length === 0) return null;
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    const safePage = Math.min(pages[pageKey], totalPages);
+    const pageStart = (safePage - 1) * PAGE_SIZE;
+    const pageRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
+    const groupKeys = rows.map(rowKey);
+    const allSelected =
+      groupKeys.length > 0 && groupKeys.every((k) => selected.has(k));
+
+    return (
+      <div className="mb-8">
+        <div className="mb-2 flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${accent}`} />
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+          <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+            {rows.length}
+          </span>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-zinc-800 text-left text-xs font-medium text-zinc-500">
+                <th className="w-8 px-2 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => toggleSelectGroup(rows)}
+                    className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
+                  />
+                </th>
+                <th className="px-4 py-3">Client</th>
+                <th className="px-4 py-3">Task Type</th>
+                <th className="px-4 py-3">PIC</th>
+                <th className="px-4 py-3">Progress</th>
+                <th className="px-4 py-3">Deadline</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>{pageRows.map((client, i) => renderRow(client, i))}</tbody>
+          </table>
+        </div>
+
+        {rows.length > PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-xs text-zinc-500">
+              Showing {pageStart + 1}–
+              {Math.min(pageStart + PAGE_SIZE, rows.length)} of {rows.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() =>
+                  setPages((p) => ({ ...p, [pageKey]: Math.max(1, safePage - 1) }))
+                }
+                disabled={safePage <= 1}
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Prev
+              </button>
+              <span className="text-xs tabular-nums text-zinc-400">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                onClick={() =>
+                  setPages((p) => ({
+                    ...p,
+                    [pageKey]: Math.min(totalPages, safePage + 1),
+                  }))
+                }
+                disabled={safePage >= totalPages}
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -229,116 +420,15 @@ export default function ClientsTable({
         </div>
       )}
 
-      <div className="rounded-lg border border-zinc-800">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-zinc-800 text-left text-xs font-medium text-zinc-500">
-              <th className="w-8 px-2 py-3">
-                <input
-                  type="checkbox"
-                  checked={selected.size > 0 && selected.size === filtered.length}
-                  onChange={toggleSelectAll}
-                  className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
-                />
-              </th>
-              <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Task Type</th>
-              <th className="px-4 py-3">PIC</th>
-              <th className="px-4 py-3">Progress</th>
-              <th className="px-4 py-3">Deadline</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((client, i) => (
-              <motion.tr
-                key={rowKey(client)}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: i * 0.03 }}
-                className={`border-b border-zinc-800/50 text-sm transition-colors hover:bg-zinc-900/50 ${getRowClasses(client)}`}
-              >
-                <td className="w-8 px-2 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(rowKey(client))}
-                    onChange={() => toggleSelect(rowKey(client))}
-                    className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-700 accent-white"
-                  />
-                </td>
-                <td className="px-4 py-3 font-medium">
-                  {client.hasPeriod ? (
-                    <Link
-                      href={`/clients/${client.clientId}/${client.periodId}`}
-                      className="text-white transition-colors hover:text-zinc-300"
-                    >
-                      {client.clientName}
-                    </Link>
-                  ) : (
-                    <span className="text-white">{client.clientName}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
-                    {client.taskTypeName}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-zinc-400">
-                  {client.picName ?? "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <StageTimeline
-                    stages={client.stages}
-                    hasPeriod={client.hasPeriod}
-                    onClick={() =>
-                      setPopupRow(client.hasPeriod && client.stageDetails ? client : null)
-                    }
-                  />
-                </td>
-                <td className="px-4 py-3 tabular-nums text-zinc-400">
-                  {client.hardDeadline
-                    ? new Date(client.hardDeadline).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "short",
-                      })
-                    : "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={client.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {!client.hasPeriod && (
-                    <button
-                      onClick={() =>
-                        handleGeneratePeriod(client.clientId, client.taskTypeId)
-                      }
-                      disabled={
-                        generating[`${client.clientId}-${client.taskTypeId}`]
-                      }
-                      className="rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
-                    >
-                      {generating[`${client.clientId}-${client.taskTypeId}`]
-                        ? "..."
-                        : "Generate"}
-                    </button>
-                  )}
-                </td>
-              </motion.tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-4 py-8 text-center text-sm text-zinc-500"
-                >
-                  No clients found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {renderSection("In Progress", groups.inProgress, "inProgress", "bg-amber-500")}
+      {renderSection("Not Started", groups.notStarted, "notStarted", "bg-zinc-500")}
+      {renderSection("Done", groups.done, "done", "bg-emerald-500")}
+
+      {filtered.length === 0 && (
+        <div className="rounded-lg border border-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">
+          No clients found
+        </div>
+      )}
 
       {popupRow && popupRow.stageDetails && (
         <StageProgressPopup
