@@ -133,15 +133,21 @@ To update a running period: edit directly on the period detail page. To change f
 | Action | Leader | Staff |
 |--------|--------|-------|
 | Update stage status, notes, assignee, checklist | ✅ | ✅ |
-| Edit client info | ✅ | ❌ |
+| Edit client info | ✅ | ✅ |
+| Add / edit / reorder stage templates + per-stage settings | ✅ | ✅ |
+| Generate a period for one client | ✅ | ✅ |
+| Assign a task type to a client | ✅ | ✅ |
+| Bulk-advance stage status | ✅ | ✅ |
+| Delete a stage template | ✅ | ❌ |
 | Archive client | ✅ | ❌ |
-| Edit stage templates | ✅ | ❌ |
-| Generate next month (bulk) | ✅ | ❌ |
+| Generate next month (bulk, all clients) | ✅ | ❌ |
 | Import clients CSV | ✅ | ❌ |
 | Promote / demote team members | ✅ | ❌ |
 | Remove team members | ✅ | ❌ |
 
 First user to sign up automatically becomes Leader. Subsequent users become Staff. Leaders can promote Staff to Leader from the Team page.
+
+> **Note on consistency:** Authorization is enforced in server actions, and a few related operations are deliberately split: *editing* a stage template is open to all members but *deleting* one is Leader-only, and generating *one* client's period is open while the *bulk* "Generate next month" is Leader-only. This matches the team's current preference (a small, trusted team) — tighten the guards in `auth-utils.ts` (`requireLeader`) if that ever changes.
 
 ---
 

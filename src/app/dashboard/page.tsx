@@ -230,6 +230,7 @@ export default async function DashboardPage({
         completed_by_name: s.completed_by_user_id
           ? completedByNameMap.get(s.completed_by_user_id) ?? null
           : null,
+        notes: s.notes,
         tasks: stageTasksMap.get(s.id) ?? [],
       }));
 
@@ -241,6 +242,14 @@ export default async function DashboardPage({
       const hasNotes = sortedStages.some(
         (s) => s.notes != null && s.notes.trim() !== ""
       );
+
+      // Reason(s) on any blocked stage — surfaced on the dashboard so the
+      // team can see *why* something is blocked without opening the period.
+      const blockedReason =
+        sortedStages
+          .filter((s) => s.status === "blocked" && s.notes && s.notes.trim())
+          .map((s) => s.notes!.trim())
+          .join(" · ") || null;
 
       return {
         clientId,
@@ -258,6 +267,7 @@ export default async function DashboardPage({
         periodMonth: selectedMonth,
         periodYear: selectedYear,
         hasNotes,
+        blockedReason,
       };
     })
     .filter(Boolean) as ClientRow[];

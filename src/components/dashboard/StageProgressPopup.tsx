@@ -16,6 +16,7 @@ export interface StagePopupItem {
   planned_date: string | null;
   completed_at: string | null;
   completed_by_name: string | null;
+  notes: string | null;
   tasks: { id: string; label: string; is_done: boolean }[];
 }
 
@@ -279,6 +280,11 @@ export default function StageProgressPopup({
                         Selesai oleh {stage.completed_by_name}
                         {stage.completed_at &&
                           ` · ${formatDate(stage.completed_at)}`}
+                      </span>
+                    )}
+                    {stage.status === "blocked" && stage.notes && (
+                      <span className="mt-0.5 block text-xs font-normal text-red-400">
+                        Blocked: {stage.notes}
                       </span>
                     )}
                   </button>
