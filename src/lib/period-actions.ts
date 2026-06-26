@@ -18,21 +18,50 @@ async function logActivity(
   entityName?: string | null,
   details?: string | null
 ) {
-  const { data } = await supabase.auth.getUser();
-  if (!data?.user) return;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", data.user.id)
-    .single();
-  await supabase.from("activity_log").insert({
-    user_id: data.user.id,
-    user_name: profile?.full_name ?? data.user.email,
-    action,
-    entity_type: entityType,
-    entity_name: entityName ?? null,
-    details: details ?? null,
-  });
+  // Audit-trail safety:
+  //  - This must NEVER break the user's actual action. The real DB write has
+  //    already happened by the time we log, so any failure here is wrapped so
+  //    it can't bubble up and fail the request.
+  //  - Failures must NOT vanish silently. If the log entry can't be written,
+  //    we record it to the server logs (visible in Vercel) so an audit-trail
+  //    gap is detectable rather than invisible.
+  try {
+    const { data, error: userError } = await supabase.auth.getUser();
+    if (userError || !data?.user) {
+      console.error(
+        `[activity-log] skipped "${action}" — could not resolve user`,
+        userError?.message ?? "no authenticated user"
+      );
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", data.user.id)
+      .single();
+
+    const { error: insertError } = await supabase.from("activity_log").insert({
+      user_id: data.user.id,
+      user_name: profile?.full_name ?? data.user.email,
+      action,
+      entity_type: entityType,
+      entity_name: entityName ?? null,
+      details: details ?? null,
+    });
+
+    if (insertError) {
+      console.error(
+        `[activity-log] FAILED to record "${action}" on ${entityType} "${entityName ?? ""}":`,
+        insertError.message
+      );
+    }
+  } catch (e) {
+    console.error(
+      `[activity-log] unexpected error recording "${action}":`,
+      e instanceof Error ? e.message : String(e)
+    );
+  }
 }
 
 type StageContext = {
