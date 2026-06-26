@@ -324,7 +324,7 @@ export async function assignTaskTypeToClientAction(
   return { success: true };
 }
 
-export async function bulkAdvanceStage(periodIds: string[], status: string): Promise<{ error?: string; success?: boolean }> {
+export async function bulkAdvanceStage(periodIds: string[], status: string, reason?: string): Promise<{ error?: string; success?: boolean }> {
   const VALID: StageStatus[] = ["not_started", "in_progress", "done", "blocked"];
   if (!VALID.includes(status as StageStatus)) {
     return { error: `Invalid status: ${status}` };
@@ -332,6 +332,12 @@ export async function bulkAdvanceStage(periodIds: string[], status: string): Pro
 
   const supabase = await createClient();
   const now = new Date().toISOString();
+
+  // Optional reason is only meaningful when blocking; stored on the stage notes.
+  const blockedReason =
+    status === "blocked" && reason && reason.trim() !== ""
+      ? reason.trim()
+      : null;
 
   const { data: currentUser } = await supabase.auth.getUser();
   const userId = currentUser?.user?.id;
@@ -353,6 +359,9 @@ export async function bulkAdvanceStage(periodIds: string[], status: string): Pro
       if (status === "done") {
         updateData.completed_at = now;
         updateData.completed_by_user_id = userId ?? null;
+      }
+      if (blockedReason) {
+        updateData.notes = blockedReason;
       }
       await supabase.from("period_stages").update(updateData).eq("id", stages[0].id);
     }

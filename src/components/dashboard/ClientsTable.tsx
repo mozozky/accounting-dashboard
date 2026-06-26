@@ -37,6 +37,7 @@ export interface ClientRow {
   periodMonth: number;
   periodYear: number;
   hasNotes: boolean;
+  blockedReason: string | null;
 }
 
 interface Props {
@@ -86,6 +87,7 @@ export default function ClientsTable({
   const [popupRow, setPopupRow] = useState<ClientRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
   const [bulking, setBulking] = useState(false);
 
   // --- Session-scoped filter persistence ---------------------------------
@@ -329,13 +331,18 @@ export default function ClientsTable({
       .map((c) => c!.periodId)
       .filter(Boolean) as string[];
 
-    const result = await bulkAdvanceStage(periodIds, bulkStatus);
+    const result = await bulkAdvanceStage(
+      periodIds,
+      bulkStatus,
+      bulkStatus === "blocked" ? bulkReason : undefined
+    );
     setBulking(false);
     if (result.error) toast.error(result.error);
     else {
       toast.success(`Updated ${periodIds.length} period(s)`);
       setSelected(new Set());
       setBulkStatus("");
+      setBulkReason("");
     }
   };
 
@@ -382,9 +389,21 @@ export default function ClientsTable({
           )}
           {client.hasNotes && (
             <span
-              title="Ada catatan"
-              aria-label="Ada catatan"
-              className="shrink-0 text-amber-400/80"
+              title={
+                client.status === "blocked" && client.blockedReason
+                  ? `Blocked: ${client.blockedReason}`
+                  : "Ada catatan"
+              }
+              aria-label={
+                client.status === "blocked" && client.blockedReason
+                  ? `Blocked: ${client.blockedReason}`
+                  : "Ada catatan"
+              }
+              className={`shrink-0 ${
+                client.status === "blocked" && client.blockedReason
+                  ? "text-red-400"
+                  : "text-amber-400/80"
+              }`}
             >
               <svg
                 width="13"
@@ -692,6 +711,15 @@ export default function ClientsTable({
             <option value="done">Done</option>
             <option value="blocked">Blocked</option>
           </select>
+          {bulkStatus === "blocked" && (
+            <input
+              type="text"
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              placeholder="Reason (optional)"
+              className="w-56 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
+            />
+          )}
           <button
             onClick={handleBulkAction}
             disabled={!bulkStatus || bulking}
