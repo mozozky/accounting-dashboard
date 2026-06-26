@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import type { StageStatus } from "@/lib/types";
 import MonthSwitcher from "@/components/dashboard/MonthSwitcher";
+import { currentMonthYearWIB, parsePeriodCookie } from "@/lib/utils/date";
 
 function getStageColor(status: StageStatus): string {
   switch (status) {
@@ -20,12 +22,14 @@ export default async function ClientDetailPage({
   searchParams: { month?: string; year?: string };
 }) {
   const supabase = await createClient();
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
 
-  const month = parseInt(searchParams?.month ?? "") || currentMonth;
-  const year = parseInt(searchParams?.year ?? "") || currentYear;
+  // Resolve the period: explicit URL param wins, then the session-remembered
+  // period (cookie), then the current month in WIB.
+  const saved = parsePeriodCookie(cookies().get("selectedPeriod")?.value);
+  const { month: currentMonth, year: currentYear } = currentMonthYearWIB();
+
+  const month = parseInt(searchParams?.month ?? "") || saved?.month || currentMonth;
+  const year = parseInt(searchParams?.year ?? "") || saved?.year || currentYear;
   const clampedMonth = Math.max(1, Math.min(12, month));
 
   const { data: client } = await supabase

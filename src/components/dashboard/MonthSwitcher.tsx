@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { currentMonthYearWIB } from "@/lib/utils/date";
 
@@ -15,6 +16,13 @@ interface Props {
 }
 
 export default function MonthSwitcher({ month, year, baseUrl = "/dashboard" }: Props) {
+  // Remember the period being viewed for the rest of the session, so navigating
+  // away (e.g. via the sidebar) returns here instead of snapping to "this month".
+  // Session cookie (no expiry) → resets to the current month on a fresh session.
+  useEffect(() => {
+    document.cookie = `selectedPeriod=${month}-${year}; path=/; SameSite=Lax`;
+  }, [month, year]);
+
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
