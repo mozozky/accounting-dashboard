@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import ClientsTable from "@/components/dashboard/ClientsTable";
 import PriorMonthsTable from "@/components/dashboard/PriorMonthsTable";
 import MonthSwitcher from "@/components/dashboard/MonthSwitcher";
@@ -6,7 +7,7 @@ import ExportButton from "@/components/dashboard/ExportButton";
 import type { ClientRow } from "@/components/dashboard/ClientsTable";
 import type { PriorRow } from "@/components/dashboard/PriorMonthsTable";
 import type { StageStatus } from "@/lib/types";
-import { determineStatus, todayWIB, daysFromNowWIB, currentMonthYearWIB, formatMonthYearID } from "@/lib/utils/date";
+import { determineStatus, todayWIB, daysFromNowWIB, currentMonthYearWIB, formatMonthYearID, parsePeriodCookie } from "@/lib/utils/date";
 
 export default async function DashboardPage({
   searchParams,
@@ -19,10 +20,14 @@ export default async function DashboardPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const now = new Date();
 
-  const selectedMonth = parseInt(params?.month ?? "") || now.getMonth() + 1;
-  const selectedYear = parseInt(params?.year ?? "") || now.getFullYear();
+  // Resolve the period: explicit URL param wins, then the session-remembered
+  // period (cookie), then the current month in WIB.
+  const saved = parsePeriodCookie(cookies().get("selectedPeriod")?.value);
+  const { month: curMonth, year: curYear } = currentMonthYearWIB();
+
+  const selectedMonth = parseInt(params?.month ?? "") || saved?.month || curMonth;
+  const selectedYear = parseInt(params?.year ?? "") || saved?.year || curYear;
 
   // --- Batch 1: independent queries fired in parallel ---
   const [
@@ -152,6 +157,7 @@ export default async function DashboardPage({
       currentUserName = me?.full_name ?? null;
     }
   }
+
   const taskTypeMap = new Map(
     (taskTypesResult.data ?? []).map((t) => [t.id, t.name])
   );
@@ -326,7 +332,6 @@ export default async function DashboardPage({
     new Set(clientRows.map((r) => r.taskTypeName).filter(Boolean))
   ).sort();
 
-  const { month: curMonth, year: curYear } = currentMonthYearWIB();
   const isCurrentMonth = selectedMonth === curMonth && selectedYear === curYear;
 
   return (
