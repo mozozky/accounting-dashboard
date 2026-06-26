@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import ClientsTable from "@/components/dashboard/ClientsTable";
+import MonthSummary from "@/components/dashboard/MonthSummary";
 import PriorMonthsTable from "@/components/dashboard/PriorMonthsTable";
 import MonthSwitcher from "@/components/dashboard/MonthSwitcher";
 import ExportButton from "@/components/dashboard/ExportButton";
@@ -49,7 +50,7 @@ export default async function DashboardPage({
     supabase
       .from("client_periods")
       .select(
-        "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, internal_deadline, planned_date, completed_at, completed_by_user_id)"
+        "id, client_id, task_type_id, hard_deadline, period_stages(id, status, stage_name, order_index, internal_deadline, planned_date, completed_at, completed_by_user_id, notes)"
       )
       .eq("period_month", selectedMonth)
       .eq("period_year", selectedYear),
@@ -90,6 +91,7 @@ export default async function DashboardPage({
     planned_date: string | null;
     completed_at: string | null;
     completed_by_user_id: string | null;
+    notes: string | null;
   }
 
   const periodByClientTask = new Map<
@@ -184,6 +186,7 @@ export default async function DashboardPage({
   let overdueCount = 0;
   let dueThisWeekCount = 0;
   let doneThisMonthCount = 0;
+  let blockedCount = 0;
 
   const clientRows: ClientRow[] = pairs
     .map(({ clientId, taskTypeId }) => {
@@ -202,6 +205,7 @@ export default async function DashboardPage({
 
       if (status === "overdue") overdueCount++;
       if (status === "done") doneThisMonthCount++;
+      if (status === "blocked") blockedCount++;
 
       if (
         hardDeadline &&
@@ -234,6 +238,10 @@ export default async function DashboardPage({
         stage_name: s.stage_name,
       }));
 
+      const hasNotes = sortedStages.some(
+        (s) => s.notes != null && s.notes.trim() !== ""
+      );
+
       return {
         clientId,
         clientName: client.name,
@@ -249,6 +257,7 @@ export default async function DashboardPage({
         hasPeriod: !!period,
         periodMonth: selectedMonth,
         periodYear: selectedYear,
+        hasNotes,
       };
     })
     .filter(Boolean) as ClientRow[];
@@ -356,6 +365,17 @@ export default async function DashboardPage({
           </span>
         </div>
       )}
+
+      <div className="mb-6">
+        <MonthSummary
+          month={selectedMonth}
+          year={selectedYear}
+          total={totalActive}
+          done={doneThisMonthCount}
+          overdue={overdueCount}
+          blocked={blockedCount}
+        />
+      </div>
 
       <ClientsTable
         clients={clientRows}
