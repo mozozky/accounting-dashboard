@@ -36,6 +36,7 @@ export interface ClientRow {
   hasPeriod: boolean;
   periodMonth: number;
   periodYear: number;
+  hasNotes: boolean;
 }
 
 interface Props {
@@ -368,16 +369,41 @@ export default function ClientsTable({
         />
       </td>
       <td className="px-4 py-3 font-medium">
-        {client.hasPeriod ? (
-          <Link
-            href={`/clients/${client.clientId}/${client.periodId}`}
-            className="text-white transition-colors hover:text-zinc-300"
-          >
-            {client.clientName}
-          </Link>
-        ) : (
-          <span className="text-white">{client.clientName}</span>
-        )}
+        <span className="inline-flex items-center gap-1.5">
+          {client.hasPeriod ? (
+            <Link
+              href={`/clients/${client.clientId}/${client.periodId}`}
+              className="text-white transition-colors hover:text-zinc-300"
+            >
+              {client.clientName}
+            </Link>
+          ) : (
+            <span className="text-white">{client.clientName}</span>
+          )}
+          {client.hasNotes && (
+            <span
+              title="Ada catatan"
+              aria-label="Ada catatan"
+              className="shrink-0 text-amber-400/80"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="13" y2="17" />
+              </svg>
+            </span>
+          )}
+        </span>
       </td>
       <td className="px-4 py-3">
         <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
