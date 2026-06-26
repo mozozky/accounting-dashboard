@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import StatusBadge from "./StatusBadge";
 import StageTimeline from "./StageTimeline";
+import QuickStatsBar, { type StatKey } from "./QuickStatsBar";
 import StageProgressPopup, {
   type StagePopupItem,
 } from "./StageProgressPopup";
@@ -17,6 +18,8 @@ import {
 import type { StageStatus } from "@/lib/types";
 
 const PAGE_SIZE = 20;
+const FILTERS_STORAGE_KEY = "dashboardFilters";
+type SortBy = "deadline" | "client";
 
 export interface ClientRow {
   clientId: string;
@@ -41,6 +44,17 @@ interface Props {
   taskTypeOptions: string[];
   currentMonth: number;
   currentYear: number;
+  // Stat counts (rendered as clickable cards that drive the filters).
+  totalActive: number;
+  overdue: number;
+  dueThisWeek: number;
+  doneThisMonth: number;
+  priorUnfinished: number;
+  // Display name of the signed-in user, for the "My clients" toggle.
+  currentUserName: string | null;
+  // WIB-pinned date strings (YYYY-MM-DD) for the "due this week" filter.
+  todayStr: string;
+  weekStr: string;
 }
 
 export default function ClientsTable({
@@ -49,17 +63,86 @@ export default function ClientsTable({
   taskTypeOptions,
   currentMonth,
   currentYear,
+  totalActive,
+  overdue,
+  dueThisWeek,
+  doneThisMonth,
+  priorUnfinished,
+  currentUserName,
+  todayStr,
+  weekStr,
 }: Props) {
   const [search, setSearch] = useState("");
   const [picFilter, setPicFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [taskTypeFilter, setTaskTypeFilter] = useState<string>("all");
+  const [dueSoonOnly, setDueSoonOnly] = useState(false);
+  const [mineOnly, setMineOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortBy>("deadline");
+
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [generatingAll, setGeneratingAll] = useState(false);
   const [popupRow, setPopupRow] = useState<ClientRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulking, setBulking] = useState(false);
+
+  // --- Session-scoped filter persistence ---------------------------------
+  // Filters survive reloads and navigation within the same browser session,
+  // then reset on a fresh session. We hydrate from sessionStorage AFTER mount
+  // (so the server/client first render match) and only start saving once
+  // hydrated, so we never overwrite stored values with the initial defaults.
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+      if (raw) {
+        const f = JSON.parse(raw);
+        if (typeof f.search === "string") setSearch(f.search);
+        if (typeof f.picFilter === "string") setPicFilter(f.picFilter);
+        if (typeof f.statusFilter === "string") setStatusFilter(f.statusFilter);
+        if (typeof f.taskTypeFilter === "string")
+          setTaskTypeFilter(f.taskTypeFilter);
+        if (typeof f.dueSoonOnly === "boolean") setDueSoonOnly(f.dueSoonOnly);
+        if (typeof f.mineOnly === "boolean") setMineOnly(f.mineOnly);
+        if (f.sortBy === "deadline" || f.sortBy === "client")
+          setSortBy(f.sortBy);
+      }
+    } catch {
+      // Ignore malformed/blocked storage — fall back to defaults.
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem(
+        FILTERS_STORAGE_KEY,
+        JSON.stringify({
+          search,
+          picFilter,
+          statusFilter,
+          taskTypeFilter,
+          dueSoonOnly,
+          mineOnly,
+          sortBy,
+        })
+      );
+    } catch {
+      // Ignore storage write failures (e.g. private mode quota).
+    }
+  }, [
+    hydrated,
+    search,
+    picFilter,
+    statusFilter,
+    taskTypeFilter,
+    dueSoonOnly,
+    mineOnly,
+    sortBy,
+  ]);
 
   const rowKey = (c: ClientRow) => `${c.clientId}-${c.taskTypeId}`;
 
@@ -77,9 +160,57 @@ export default function ClientsTable({
       if (taskTypeFilter !== "all" && c.taskTypeName !== taskTypeFilter) {
         return false;
       }
+      if (mineOnly && (!currentUserName || c.picName !== currentUserName)) {
+        return false;
+      }
+      if (dueSoonOnly) {
+        // Mirrors the "Due This Week" stat: a deadline between today and 7
+        // days out (inclusive), not yet done. Excludes overdue + no-deadline.
+        if (!c.hardDeadline) return false;
+        if (c.status === "done" || c.status === "no_period") return false;
+        if (c.hardDeadline < todayStr || c.hardDeadline > weekStr) return false;
+      }
       return true;
     });
-  }, [clients, search, picFilter, statusFilter, taskTypeFilter]);
+  }, [
+    clients,
+    search,
+    picFilter,
+    statusFilter,
+    taskTypeFilter,
+    mineOnly,
+    dueSoonOnly,
+    currentUserName,
+    todayStr,
+    weekStr,
+  ]);
+
+  // --- Sort helper: by soonest deadline, or alphabetically by client. ---
+  const sortRows = useMemo(() => {
+    const byClient = (a: ClientRow, b: ClientRow) =>
+      a.clientName.localeCompare(b.clientName) ||
+      a.taskTypeName.localeCompare(b.taskTypeName);
+
+    return (rows: ClientRow[]): ClientRow[] => {
+      const copy = rows.slice();
+      if (sortBy === "deadline") {
+        copy.sort((a, b) => {
+          // Rows with a deadline come first, soonest at the top; no-deadline last.
+          if (a.hardDeadline && b.hardDeadline) {
+            if (a.hardDeadline !== b.hardDeadline)
+              return a.hardDeadline < b.hardDeadline ? -1 : 1;
+            return byClient(a, b);
+          }
+          if (a.hardDeadline) return -1;
+          if (b.hardDeadline) return 1;
+          return byClient(a, b);
+        });
+      } else {
+        copy.sort(byClient);
+      }
+      return copy;
+    };
+  }, [sortBy]);
 
   // --- Group filtered rows into status buckets for sectioned display ---
   const groups = useMemo(() => {
@@ -92,8 +223,12 @@ export default function ClientsTable({
         notStarted.push(c);
       else inProgress.push(c); // in_progress, blocked, overdue
     }
-    return { inProgress, notStarted, done };
-  }, [filtered]);
+    return {
+      inProgress: sortRows(inProgress),
+      notStarted: sortRows(notStarted),
+      done: sortRows(done),
+    };
+  }, [filtered, sortRows]);
 
   // Independent pagination per section.
   const [pages, setPages] = useState({ inProgress: 1, notStarted: 1, done: 1 });
@@ -101,7 +236,49 @@ export default function ClientsTable({
   // Reset all section pages whenever the filters change.
   useEffect(() => {
     setPages({ inProgress: 1, notStarted: 1, done: 1 });
-  }, [search, picFilter, statusFilter, taskTypeFilter]);
+  }, [search, picFilter, statusFilter, taskTypeFilter, dueSoonOnly, mineOnly]);
+
+  // --- Stat card → filter wiring (feature: clickable Quick Stats) ---
+  const handleStatSelect = (key: StatKey) => {
+    switch (key) {
+      case "total":
+        // Clear everything to show the full list.
+        setSearch("");
+        setPicFilter("all");
+        setStatusFilter("all");
+        setTaskTypeFilter("all");
+        setDueSoonOnly(false);
+        setMineOnly(false);
+        break;
+      case "overdue":
+        setDueSoonOnly(false);
+        setStatusFilter("overdue");
+        break;
+      case "done":
+        setDueSoonOnly(false);
+        setStatusFilter("done");
+        break;
+      case "dueThisWeek":
+        setStatusFilter("all");
+        setDueSoonOnly(true);
+        break;
+      case "prior":
+        // Different table further down the page — scroll to it.
+        document
+          .getElementById("prior-months")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+    }
+  };
+
+  // Which stat card matches the current filter (for highlighting).
+  const activeStat: StatKey | null = dueSoonOnly
+    ? "dueThisWeek"
+    : statusFilter === "overdue"
+    ? "overdue"
+    : statusFilter === "done"
+    ? "done"
+    : null;
 
   const handleGeneratePeriod = async (clientId: string, taskTypeId: string) => {
     const key = `${clientId}-${taskTypeId}`;
@@ -335,8 +512,27 @@ export default function ClientsTable({
     );
   };
 
+  const toggleBtn = (active: boolean) =>
+    `rounded-md border px-3 py-1.5 text-sm transition-colors ${
+      active
+        ? "border-zinc-500 bg-zinc-700 text-white"
+        : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+    }`;
+
   return (
     <div>
+      <div className="mb-8">
+        <QuickStatsBar
+          totalActive={totalActive}
+          overdue={overdue}
+          dueThisWeek={dueThisWeek}
+          doneThisMonth={doneThisMonth}
+          priorUnfinished={priorUnfinished}
+          onSelect={handleStatSelect}
+          activeKey={activeStat}
+        />
+      </div>
+
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <input
           type="text"
@@ -386,6 +582,44 @@ export default function ClientsTable({
           <option value="no_period">No Period</option>
         </select>
 
+        {currentUserName && (
+          <button
+            type="button"
+            onClick={() => setMineOnly((v) => !v)}
+            className={toggleBtn(mineOnly)}
+            title="Show only clients where you are the PIC"
+          >
+            My clients
+          </button>
+        )}
+
+        {/* Sort toggle: soonest deadline first, or alphabetical by client. */}
+        <div className="flex items-center overflow-hidden rounded-md border border-zinc-700">
+          <span className="px-2 py-1.5 text-xs text-zinc-500">Sort</span>
+          <button
+            type="button"
+            onClick={() => setSortBy("deadline")}
+            className={`px-3 py-1.5 text-sm transition-colors ${
+              sortBy === "deadline"
+                ? "bg-zinc-700 text-white"
+                : "bg-zinc-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            Deadline
+          </button>
+          <button
+            type="button"
+            onClick={() => setSortBy("client")}
+            className={`px-3 py-1.5 text-sm transition-colors ${
+              sortBy === "client"
+                ? "bg-zinc-700 text-white"
+                : "bg-zinc-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            Client
+          </button>
+        </div>
+
         <div className="flex-1" />
 
         <button
@@ -396,6 +630,28 @@ export default function ClientsTable({
           {generatingAll ? "Generating..." : "Generate Next Month"}
         </button>
       </div>
+
+      {(dueSoonOnly || mineOnly) && (
+        <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+          <span>Active filters:</span>
+          {dueSoonOnly && (
+            <button
+              onClick={() => setDueSoonOnly(false)}
+              className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 hover:bg-zinc-700"
+            >
+              Due this week ✕
+            </button>
+          )}
+          {mineOnly && (
+            <button
+              onClick={() => setMineOnly(false)}
+              className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 hover:bg-zinc-700"
+            >
+              My clients ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {selected.size > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded border border-zinc-700 bg-zinc-800/50 px-3 py-2">

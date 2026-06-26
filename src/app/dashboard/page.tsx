@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
-import QuickStatsBar from "@/components/dashboard/QuickStatsBar";
 import ClientsTable from "@/components/dashboard/ClientsTable";
 import PriorMonthsTable from "@/components/dashboard/PriorMonthsTable";
 import MonthSwitcher from "@/components/dashboard/MonthSwitcher";
@@ -18,6 +17,9 @@ export default async function DashboardPage({
   // Next.js 15: searchParams is a Promise — await it.
   const params = await searchParams;
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Resolve the period: explicit URL param wins, then the session-remembered
   // period (cookie), then the current month in WIB.
@@ -140,6 +142,22 @@ export default async function DashboardPage({
   const profileMap = new Map(
     (profilesResult.data ?? []).map((p) => [p.id, p.full_name ?? ""])
   );
+
+  // Display name of the signed-in user, for the "My clients" toggle. Falls
+  // back to a direct lookup if they aren't a PIC (and thus not in profileMap).
+  let currentUserName: string | null = null;
+  if (user) {
+    currentUserName = profileMap.get(user.id) || null;
+    if (!currentUserName) {
+      const { data: me } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      currentUserName = me?.full_name ?? null;
+    }
+  }
+
   const taskTypeMap = new Map(
     (taskTypesResult.data ?? []).map((t) => [t.id, t.name])
   );
@@ -339,25 +357,25 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <div className="mb-8">
-        <QuickStatsBar
-          totalActive={totalActive}
-          overdue={overdueCount}
-          dueThisWeek={dueThisWeekCount}
-          doneThisMonth={doneThisMonthCount}
-          priorUnfinished={priorUnfinishedCount}
-        />
-      </div>
-
       <ClientsTable
         clients={clientRows}
         picOptions={uniquePicOptions}
         taskTypeOptions={taskTypeNames}
         currentMonth={selectedMonth}
         currentYear={selectedYear}
+        totalActive={totalActive}
+        overdue={overdueCount}
+        dueThisWeek={dueThisWeekCount}
+        doneThisMonth={doneThisMonthCount}
+        priorUnfinished={priorUnfinishedCount}
+        currentUserName={currentUserName}
+        todayStr={todayStr}
+        weekStr={weekStr}
       />
 
-      <PriorMonthsTable rows={priorRows} />
+      <div id="prior-months">
+        <PriorMonthsTable rows={priorRows} />
+      </div>
     </div>
   );
 }
