@@ -32,6 +32,22 @@ export function currentMonthYearWIB(): { month: number; year: number } {
   return { month, year };
 }
 
+/**
+ * Parses a session-cookie value of the form "M-Y" (e.g. "6-2026") into
+ * { month, year }, or returns null if missing / malformed / out of range.
+ * Used to remember the last-selected period across navigation.
+ */
+export function parsePeriodCookie(
+  value: string | undefined | null
+): { month: number; year: number } | null {
+  if (!value) return null;
+  const [m, y] = value.split("-").map(Number);
+  if (!Number.isInteger(m) || !Number.isInteger(y)) return null;
+  if (m < 1 || m > 12) return null;
+  if (y < 2000 || y > 3000) return null;
+  return { month: m, year: y };
+}
+
 const ID_MONTHS = [
   "Januari",
   "Februari",
