@@ -18,9 +18,6 @@ export default async function DashboardPage({
   // Next.js 15: searchParams is a Promise — await it.
   const params = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Resolve the period: explicit URL param wins, then the session-remembered
   // period (cookie), then the current month in WIB.
@@ -30,13 +27,17 @@ export default async function DashboardPage({
   const selectedMonth = parseInt(params?.month ?? "") || saved?.month || curMonth;
   const selectedYear = parseInt(params?.year ?? "") || saved?.year || curYear;
 
-  // --- Batch 1: independent queries fired in parallel ---
+  // --- Batch 1: independent queries + auth, fired in parallel ---
   const [
+    {
+      data: { user },
+    },
     { data: clients },
     { data: templateRows },
     { data: selectedPeriods },
     { data: priorPeriods },
   ] = await Promise.all([
+    supabase.auth.getUser(),
     supabase
       .from("clients")
       .select("id, name, pic_user_id")
@@ -78,7 +79,9 @@ export default async function DashboardPage({
 
   const taskTypeIds = Array.from(new Set(pairs.map((p) => p.taskTypeId)));
   const picUserIds = Array.from(
-    new Set((clients ?? []).map((c) => c.pic_user_id).filter(Boolean))
+    new Set(
+      [...(clients ?? []).map((c) => c.pic_user_id), user?.id].filter(Boolean)
+    )
   ) as string[];
 
   // --- Process periods to find stage ids + completed-by user ids ---
@@ -145,20 +148,10 @@ export default async function DashboardPage({
     (profilesResult.data ?? []).map((p) => [p.id, p.full_name ?? ""])
   );
 
-  // Display name of the signed-in user, for the "My clients" toggle. Falls
-  // back to a direct lookup if they aren't a PIC (and thus not in profileMap).
-  let currentUserName: string | null = null;
-  if (user) {
-    currentUserName = profileMap.get(user.id) || null;
-    if (!currentUserName) {
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-      currentUserName = me?.full_name ?? null;
-    }
-  }
+  // Display name of the signed-in user, for the "My clients" toggle. The
+  // current user's id is included in the profiles fetch above, so this needs
+  // no extra round-trip.
+  const currentUserName = user ? profileMap.get(user.id) || null : null;
 
   const taskTypeMap = new Map(
     (taskTypesResult.data ?? []).map((t) => [t.id, t.name])
