@@ -74,8 +74,9 @@ Run these in Supabase SQL Editor **in order**:
 | 15 | `015_split_bpjs_tax.sql` | Split "BPJS & Tax" into separate BPJS (deadline day 10) and Tax (deadline day 15) built-in task types |
 | 16 | `016_planned_date_assignee.sql` | Add planned_date (review target) + default_assignee_type (auto-assign PIC) |
 | 17 | `017_backfill_assignee_may.sql` | One-time backfill: fill May 2026 assignees from client PIC (only empty ones) |
+| 18 | `018_performance_indexes.sql` | Add indexes on FK/filter columns (period_stages, client_periods, stage_tasks, stage_templates, clients) for faster dashboard/queries — safe + idempotent |
 
-> **Fresh setup:** Skip 003 (dev seed), 005, 006 (superseded), 017 (one-time backfill for existing May 2026 data). Run 001, 002, 004, 007–016 in order.
+> **Fresh setup:** Skip 003 (dev seed), 005, 006 (superseded), 017 (one-time backfill for existing May 2026 data). Run 001, 002, 004, 007–016, 018 in order.
 
 ### Run Locally
 
